@@ -949,7 +949,7 @@ function findGijPocketByGUI(gui){
             commandReader(js).then(res => {
 
                 // CLEAN ALL GUI BEFORE SEND OUT
-                cleanJSONGUI(js.client.data);
+                cleanJSONGUI(js.client.data); // TODO HERE 
                 ws.send(JSON.stringify(js.client));
             }).catch(err => {
                 js = err;
