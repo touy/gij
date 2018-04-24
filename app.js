@@ -78,6 +78,14 @@ var __design_usergij = {
             "reduce": "_count",
             "map": "function(doc) {\r\n   emit([doc.usedtime],doc);\r\n    }"
         },
+        "sumAllGij": {
+            "reduce": "_sum",
+            "map": "function(doc) {\r\n   emit(doc.pocketgui,doc.gijvalue);\r\n    }"
+        },
+        "sumSpent": {
+            "reduce": "_sum",
+            "map": "function(doc) {\r\n  if(doc.usedtime) emit(doc.pocketgui,doc.gijvalue);\r\n    }"
+        },
         "findByUserGUI": {
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         },
@@ -409,140 +417,150 @@ function commandReader(js) {
     const deferred = Q.defer();
     // const isValid=validateTopup(js.client);
     // if(!isValid.length)
-    switch (js.client.data.command) {
-        case 'register-gij':
-            register_gij_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'check-gij':
-            check_gij_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'check-pocket':
-            check_pocket_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'check-payment':
-            check_payment_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'transfer-gij':
-            check_payment_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'list-transfer-gij':
-            check_payment_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'topup-gij-request':
-            topup_gij_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'list-topup-gij-request':
-            list_topup_gij_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'pay-gij':
-            pay_gij(js).then(res => { // pay for service such as : topup
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'check-gij-stock': // ADMiN ONLY
-            check_gij_stock_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'topup-gij': // ADMiN ONLY
-            topup_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'approve-topup-gij-request': // ADMiN ONLY
-            topup_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-        case 'approve-list-topup-gij-request': // ADMiN ONLY
-            topup_ws(js).then(res => {
-                deferred.resolve(res);
-                //console.log(res);
-            }).catch(err => {
-                //console.log(err);
-                deferred.reject(err);
-            });
-            break;
-            // case 'system-prefix':
-            //     deferred.resolve(get_system_prefix());
-            // break;
-        default:
-            break;
-    }
+    getUserInfoByLoginToken(js).then(res=>{
+        if(res){
+            switch (js.client.data.command) {
+                case 'register-gij':
+                    register_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                    }).catch(err => {
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'sum-gij':
+                    sum_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                    }).catch(err => {
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'check-gij':
+                    check_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                    }).catch(err => {
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'check-pocket':
+                    check_pocket_ws(js).then(res => {
+                        deferred.resolve(res);
+        
+                    }).catch(err => {
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'check-payment':
+                    check_payment_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'transfer-gij':
+                    check_payment_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'list-transfer-gij':
+                    check_payment_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'topup-gij-request':
+                    topup_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'list-topup-gij-request':
+                    list_topup_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'pay-gij':
+                    pay_gij(js).then(res => { // pay for service such as : topup
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'check-gij-stock': // ADMiN ONLY
+                    check_gij_stock_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'topup-gij': // ADMiN ONLY
+                    topup_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+        
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'approve-topup-gij-request': // ADMiN ONLY
+                    topup_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'approve-list-topup-gij-request': // ADMiN ONLY
+                    topup_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                    // case 'system-prefix':
+                    //     deferred.resolve(get_system_prefix());
+                    // break;
+                default:
+                    break;
+            }
+        }else{
+            js.client.data.message=new Error('ERROR not found the key');
+            deferred.reject(js);
+        }
+    }).catch(err=>{
+        js.client.data.message=err;
+        deferred.reject(js);
+    });    
     return deferred.promise;
 }
 
@@ -573,7 +591,12 @@ function getUserInfoByLoginToken(js) {
                 command: 'usergui-changed',
                 client: data
             }), 'EX', 60 * 60 / 2);
-            deferred.resolve(data);
+            if(data.data.user.gui){
+                    deferred.resolve(data);
+                }
+            else{
+                    deferred.reject(new Error('Error user not login'))
+            }   
     
         });
         ws_client.on("error", (err) => {
@@ -597,13 +620,45 @@ function getUserInfoByLoginToken(js) {
 
     return deferred.promise;
 }
-
-    function register_gij_ws(js) {
-        let deferred = Q.defer();
-
-        return deferred.promise;
+function register_gij_ws(js) {
+    let deferred = Q.defer();
+    try {
+        findGijPocketByGUI(js.client.data.user.gui).then(res=>{
+            if(res){
+                js.client.data.message=new Error('Error pocket exist');
+                deferred.reject(js);
+            }else{
+                let db=create_db('gijpocket')
+            
+                const p = {
+                    gui: uuidV4(),
+                    usergui: js.client.data.user.gui,
+                    createddate: convertTZ(new Date()),
+                    totalvalue: 0,
+                    totalspent: 0,
+                }
+                db.insert(p,p.gui,(err,res)=>{
+                    if(err){
+                        js.client.data.message=err;
+                        deferred.reject(js);
+                    }esle{
+                        js.client.data.message='OK register';
+                        deferred.resolve(js);
+                    }
+                })
+            }
+        }).catch(err=>{
+            js.client.data.message=err;
+            deferred.reject(js);
+        });
+    } catch (error) {
+        js.client.data.message=error;
+        deferred.reject(js);
     }
-    function findGijPocketByGUI(gui){
+    
+    return deferred.promise;
+}
+function findGijPocketByGUI(gui){
         let deferred = Q.defer();
         let db=create_db('gijpocket');
         db.view(__design_view,'findByUserGUI',{key:gui,limit:1},(err,res)=>{
@@ -616,6 +671,44 @@ function getUserInfoByLoginToken(js) {
                 }
             }
         });
+        return deferred.promise;
+    }
+    function getPocketByUserGUI(ugui){
+        let deferred=Q.defer();
+        let db=create_db('gijpocket');
+        db.view(__design_view,'findByPocketGUI',{key:gui,limit:1},(err,res)=>{
+            if(err) deferred.reject(err);
+            else{
+                if(res.rows.length){
+                    deferred.resolve(res.rows[0].value);
+                }else{
+                    deferred.reject('');
+                }
+            }
+        });
+        return deferred.promise;
+    }
+    function check_pocket_ws(js){
+        let deferred=Q.defer();
+        try {
+            getPocketByUserGUI(js.client.data.user.gui).then(res=>{
+                if(res){
+                    js.client.data.message='OK'
+                    js.client.data.gijpocket=res;
+                }else{
+                    js.client.data.message=new Error('Error no pocket');
+                    deferred.reject(js);
+                }
+                
+            }).catch(err=>{
+                js.client.data.message=err;
+                deferred.reject(js);
+            });
+        } catch (error) {
+            js.client.data.message=error;
+            deferred.reject(js);
+        }
+        
         return deferred.promise;
     }
     function check_exist_pocket(gui){
@@ -680,44 +773,48 @@ function getUserInfoByLoginToken(js) {
         }
         return deferred.promise;
     }
+    function cleanGijList(gij){
+        for (let index = 0; index < gij.length; index++) {
+            const element = gij[index];
+            element.gui='';
+            element._id='';
+            element._rev='';
+            element.usergui='';
+            element.gijpocketgui='';
+        }
+    }
+    function cleanPocket(p){
+        for (let index = 0; index < p.length; index++) {
+            const element = p[index];
+            element.gui='';
+            element._id='';
+            element._rev='';
+            element.usergui='';            
+        }
+    }
     function check_gij_ws(js) {
         let deferred = Q.defer();
         try {
-            getUserInfoByLoginToken(js).then(res=>{
-                if(res){
-                    check_exist_pocket(res.data.user.gui).then(res=>{
-                        if(res.length){
-                            let p=res[0];                            
-                            var usergij = {
-                                usergui: '',
-                                gijgui: '',
-                                gijvalue: 0,
-                                usedtime: '',
-                                ref: '',
-                                gijpocketgui: '',
-                            }
-                            getGijList(p.gijpocketgui).then(res=>{
-
-                            }).catch(err=>{
-                                js.client.data.message=err;
-                                deferred.reject(js);
-                            });
-                        }else{
-                            js.client.data.message=new Error('ERROR pocket not found');
-                            deferred.reject(js);
-                        }
+            check_exist_pocket(js.client.data.user.gui).then(res=>{
+                if(res.length){                    
+                    let p=res[0];                            
+                    getGijList(p.gijpocketgui,js.client.data.page,js.client.data.maxpage).then(g=>{
+                        cleanGijList(g);
+                        cleanPocket(res);
+                        js.client.data.gijlist=g;
+                        deferred.resolve(js);
                     }).catch(err=>{
                         js.client.data.message=err;
                         deferred.reject(js);
                     });
                 }else{
-                    js.client.data.message=new Error('ERROR not found the key');
+                    js.client.data.message=new Error('ERROR pocket not found');
                     deferred.reject(js);
                 }
             }).catch(err=>{
                 js.client.data.message=err;
                 deferred.reject(js);
-            });
+            });            
         } catch (error) {
             js.client.data.message=error
             deferred.reject(js);
@@ -725,7 +822,70 @@ function getUserInfoByLoginToken(js) {
         
         return deferred.promise;
     }
-
+    function getSumPocketFromGij(js){
+        let deferred=Q.defer();
+        try {
+            var usergij = {
+                usergui: '',
+                sn:'',
+                gijgui: '',
+                gijvalue: 0,
+                usedtime: '',
+                ref: '',
+                gijpocketgui: '',
+            }
+            let db=create_db('usergij');
+            db.view(__design_view,'sumAllGij',{key:js.client.data.gijpocket.gui},(err,res)=>{
+                if(err) deferred.reject(err);
+                else{
+                    const summAll=res.rows[0].value;
+                    db.view(__design_view,'sumSpent',{key:js.client.data.gijpocket.gui},(err,res)=>{
+                        if(err) deferred.reject(err);
+                        else{
+                            const sumSpent=res.rows[0].value;
+                            deferred.resolve({total:sumAll,spent:sumSpent});
+                        }
+                    });
+                }
+            });
+        } catch (error) {
+            deferred.reject(error);
+        }
+        return deferred.promise;
+    }
+    function sum_gij_ws(js){
+        let deferred=Q.defer();
+        try {
+            check_exist_pocket(js.client.data.user.gui).then(res=>{
+                if(res.length){                    
+                    let p=res[0];          
+                    js.client.data.gijpocket=p;                  
+                    getSumPocketFromGij(js).then(res=>{
+                        if(res){
+                            js.client.data.message='OK gij sum';
+                            deferred.resolve(js);   
+                        }else{
+                            js.client.data.message='ERROR could not sum gij';
+                            deferred.reject(js);
+                        }
+                    }).catch(err=>{
+                        js.client.data.message=err;
+                        deferred.reject(js);
+                    });
+                }else{
+                    js.client.data.message=new Error('ERROR pocket not found');
+                    deferred.reject(js);
+                }
+            }).catch(err=>{
+                js.client.data.message=err;
+                deferred.reject(js);
+            });            
+        } catch (error) {
+            js.client.data.message=error
+            deferred.reject(js);
+        }
+        return deferred.promise;
+    }
     function check_payment_ws(js) {
         let deferred = Q.defer();
 
@@ -762,6 +922,9 @@ function getUserInfoByLoginToken(js) {
 
         return deferred.promise;
     }
+    function cleanJSONGUI(data){
+
+    }
     wss.on('connection', function connection(ws, req) {
         const ip = req.connection.remoteAddress;
         console.log('connection from ' + ip);
@@ -784,7 +947,10 @@ function getUserInfoByLoginToken(js) {
             js.ws = ws;
             ws.client = data;
             commandReader(js).then(res => {
-                ws.send(JSON.stringify(res.client));
+
+                // CLEAN ALL GUI BEFORE SEND OUT
+                cleanJSONGUI(js.client.data);
+                ws.send(JSON.stringify(js.client));
             }).catch(err => {
                 js = err;
                 var l = {
