@@ -474,28 +474,38 @@ function setNotificationStatus(client) {
 
 function LTCserviceSMS(client) {
     try {
-        client.prefix = 'gij';
-    client.data.command='send-sms';
-    let ws_client = new WebSocket('ws://localhost:8081/'); // ltcservice
-    ws_client.on('open', function open() {
-        ws_client.send(JSON.stringify(client), function (err) {
-            if (err)
-                setErrorStatus(client);
+        client.data.command = 'send-sms'
+        client.prefix = 'user-management';
+        let ws_client = new WebSocket('ws://nonav.net:8081/'); //ltcservice
+        ws_client.on('open', function open() {
+            ws_client.send(JSON.stringify(client), function (err) {
+                if (err) {
+                    client.data.message = err;
+                    client.data.sms.content='';
+                    setErrorStatus(client);
+                }
+                console.log('socket open...');
+
+            });
         });
-    });
-    ws_client.on('message', function incoming(data) {
-        client = JSON.parse(data);
-        delete data.prefix;
-        client.data.sms.content='';
-        //delete data.res.SendSMSResult.user_id;
-        setNotificationStatus(client);
-        setOnlineStatus(client);
-    });
-    ws_client.on("error", (err) => {
-        setErrorStatus(client);
-    });
+        ws_client.on('message', function incoming(data) {
+            console.log("RECIEVED  FROM SMS : "); 
+            //client = JSON.parse(data);
+            //console.log(client);
+            client.data.sms.content='';
+            client.data['notification'] = 'SMS has been sent out'; 
+            client.prefix = '';
+            
+            setNotificationStatus(client);
+            //setOnlineStatus(client);
+    
+        });
+        ws_client.on("error", (err) => {
+            client.data.message = err;            
+            setErrorStatus(client);
+        });     
     } catch (error) {
-        client.data.message=error;
+        client.data.message = err;
         setErrorStatus(client);
     }
     
