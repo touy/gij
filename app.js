@@ -1,3 +1,7 @@
+import {
+    EADDRNOTAVAIL
+} from 'constants';
+
 var gij = { // as gij stock
     gui: '',
     sn: '',
@@ -8,11 +12,11 @@ var gij = { // as gij stock
 }
 var usergij = {
     usergui: '',
-    sn:'',
+    sn: '',
     gijgui: '',
     gijvalue: 0,
     usedtime: '',
-    ref: '',
+    ref: [],
     gijpocketgui: '',
 }
 var gijpocket = {
@@ -21,6 +25,8 @@ var gijpocket = {
     createddate: '',
     totalvalue: 0,
     totalspent: 0,
+    totalgij: 0,
+    sumgij:0,
 }
 var gijpayment = {
     gui: '',
@@ -28,7 +34,13 @@ var gijpayment = {
     paymenttime: '',
     payemntvalue: 0,
     ref: '',
+    sender: '',
+    receiver: '',
+    sendingvalue: 0,
+    receivingvalue: 0,
+    paymentype:'',
 }
+
 //*** DESIGN */
 var __design_gij = {
     "_id": "_design/objectList",
@@ -69,14 +81,28 @@ var __design_usergij = {
     "_id": "_design/objectList",
     "views": {
         "findPaymentRef": {
-            "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref],doc);\r\n    }\r\n}"
+            "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref,doc.gui],doc);\r\n    }\r\n}"
         },
         "findUsedTime": {
-            "map": "function(doc) {\r\n   emit([doc.usedtime],doc);\r\n    }"
+            "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],doc);\r\n    }"
         },
         "countUsedTime": {
             "reduce": "_count",
-            "map": "function(doc) {\r\n   emit([doc.usedtime],doc);\r\n    }"
+            "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],doc);\r\n    }"
+        },
+        "findAvailableGij": {
+            "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+        },
+        "countAvailableGij": {
+            "reduce": "_count",
+            "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+        },
+        "findUsedGij": {
+            "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+        },
+        "countUsedGij": {
+            "reduce": "_count",
+            "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
         },
         "sumAllGij": {
             "reduce": "_sum",
@@ -226,6 +252,9 @@ const nano = require('nano')('http://admin:admin@localhost:5984');
 const fs = require('fs');
 const redis = require("redis");
 // const __browser = require('detect-browser');
+const express = require('express');
+const app = express();
+app.set('trust proxy', true);
 var r_client = redis.createClient();
 var moment = require('moment-timezone');
 var multer = require('multer');
@@ -235,7 +264,7 @@ var passwordValidator = require('password-validator');
 const Q = require('q');
 
 var _current_system = 'gij';
-var _client_prefix = ['ice-maker', 'gij', 'web-post', 'user-management','default'];
+var _client_prefix = ['ice-maker', 'gij', 'web-post', 'user-management', 'default'];
 var _system_prefix = ['ice-maker', 'gij', 'web-post', 'user-management'];
 
 const http = require('http');
@@ -383,42 +412,100 @@ r_client.on("monitor", function (time, args, raw_reply) {
         });
 });
 
+function setPhoneStatus(client, secret) {
+    r_client.set(_current_system + '_phone_' + client.gui, JSON.stringify({
+        command: 'phone-changed',
+        secret: secret
+    }), 'EX', 60 * 3);
+}
+
+function setUserGUIStatus(client, gui) {
+    r_client.set(_current_system + '_usergui_' + client.logintoken, JSON.stringify({
+        command: 'usergui-changed',
+        gui: gui
+    }), 'EX', 60 * 60 / 2);
+}
+
+function setLoginStatus(client) {
+    r_client.set(_current_system + '_login_' + client.logintoken, JSON.stringify({
+        command: 'login-changed',
+        client: client
+    }), 'EX', 60 * 5);
+}
+
+function setForgotStatus(client) {
+    r_client.set(_current_system + '_forgot_' + client.gui, JSON.stringify({
+        command: 'forgot-changed',
+        forgot: keys
+    }), 'EX', 60 * 3);
+}
+
+function setClientStatus(client) {
+    r_client.set(_current_system + '_client_' + client.gui, JSON.stringify({
+        command: 'client-changed',
+        client: client
+    }), 'EX', 60 * 5);
+}
+
+function setOnlineStatus(client) {
+    r_client.set('_online_' + client.username, JSON.stringify({
+        command: 'online-changed',
+        client: {
+            username: client.username,
+            onlinetime: convertTZ(new Date()),
+            system: _current_system
+        }
+    }), 'EX', 60 * 30 / 2);
+}
+
+function setErrorStatus(client) {
+    r_client.set(_current_system + '_error_' + client.gui, JSON.stringify({
+        command: 'error-changed',
+        client: client
+    }), 'EX', 60 * 5);
+}
+
+function setNotificationStatus(client) {
+    r_client.set(_current_system + '_notification_' + client.gui, JSON.stringify({
+        command: 'notification-changed',
+        client: data
+    }), 'EX', 60 * 60 / 2); // client side could not see this , the other server as a client can see this .
+}
+
 function LTCserviceSMS(client) {
-    client.prefix = 'user-management';
+    try {
+        client.prefix = 'gij';
+    client.data.command='send-sms';
     let ws_client = new WebSocket('ws://localhost:8081/'); // ltcservice
     ws_client.on('open', function open() {
         ws_client.send(JSON.stringify(client), function (err) {
             if (err)
-                r_client.set(_current_system+'_error_' + client.gui, JSON.stringify({
-                    command: 'error-changed',
-                    err: err
-                }), 'EX', 60 * 5);
+                setErrorStatus(client);
         });
     });
     ws_client.on('message', function incoming(data) {
-        data = JSON.parse(data);
+        client = JSON.parse(data);
         delete data.prefix;
+        client.data.sms.content='';
         //delete data.res.SendSMSResult.user_id;
-        r_client.set(_current_system+'_client_' + client.gui, JSON.stringify({
-            command: 'client-changed',
-            client: data
-        }), 'EX', 60 * 60 / 2);
+        setNotificationStatus(client);
+        setOnlineStatus(client);
     });
     ws_client.on("error", (err) => {
-        r_client.set(_current_system+'_error_' + client.gui, JSON.stringify({
-            command: 'error-changed',
-            err: err
-        }), 'EX', 60 * 5);
-
+        setErrorStatus(client);
     });
+    } catch (error) {
+        client.data.message=error;
+        setErrorStatus(client);
+    }
+    
 }
-
 function commandReader(js) {
     const deferred = Q.defer();
     // const isValid=validateTopup(js.client);
     // if(!isValid.length)
-    getUserInfoByLoginToken(js).then(res=>{
-        if(res){
+    getUserInfoByLoginToken(js).then(res => {
+        if (res) {
             switch (js.client.data.command) {
                 case 'register-gij':
                     register_gij_ws(js).then(res => {
@@ -444,8 +531,18 @@ function commandReader(js) {
                 case 'check-pocket':
                     check_pocket_ws(js).then(res => {
                         deferred.resolve(res);
-        
+
                     }).catch(err => {
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'transfer-gij':
+                    transfer_gij_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+
+                    }).catch(err => {
+                        //console.log(err);
                         deferred.reject(err);
                     });
                     break;
@@ -453,27 +550,18 @@ function commandReader(js) {
                     check_payment_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
                     });
                     break;
-                case 'transfer-gij':
-                    check_payment_ws(js).then(res => {
-                        deferred.resolve(res);
-                        //console.log(res);
-        
-                    }).catch(err => {
-                        //console.log(err);
-                        deferred.reject(err);
-                    });
-                    break;
+
                 case 'list-transfer-gij':
                     check_payment_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -483,7 +571,7 @@ function commandReader(js) {
                     topup_gij_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -493,7 +581,7 @@ function commandReader(js) {
                     list_topup_gij_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -503,7 +591,7 @@ function commandReader(js) {
                     pay_gij(js).then(res => { // pay for service such as : topup
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -513,7 +601,7 @@ function commandReader(js) {
                     check_gij_stock_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -523,7 +611,7 @@ function commandReader(js) {
                     topup_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-        
+
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -553,421 +641,926 @@ function commandReader(js) {
                 default:
                     break;
             }
-        }else{
-            js.client.data.message=new Error('ERROR not found the key');
+        } else {
+            js.client.data.message = new Error('ERROR not found the key');
             deferred.reject(js);
         }
-    }).catch(err=>{
-        js.client.data.message=err;
+    }).catch(err => {
+        js.client.data.message = err;
         deferred.reject(js);
-    });    
+    });
     return deferred.promise;
 }
 
 function getUserInfoByLoginToken(js) {
     let deferred = Q.defer();
     try {
-        let client=js.client;
-        client.command='get-user-gui';
+        let client = js.client;
+        client.command = 'get-user-gui';
         client.prefix = 'gij';
         let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
         ws_client.on('open', function open() {
             ws_client.send(JSON.stringify(client), function (err) {
-                if (err){
-                    r_client.set(_current_system+'_error_' + client.gui, JSON.stringify({
-                        command: 'error-changed',
-                        err: err
-                    }), 'EX', 60 * 5);
+                if (err) {
+                    setErrorStatus(client);
                     deferred.reject(err);
                 }
             });
         });
         ws_client.on('message', function incoming(data) {
-            data = JSON.parse(data);
+            client = JSON.parse(data);
             delete data.prefix;
             //delete data.res.SendSMSResult.user_id;
             //js.client=data;
-            r_client.set(_current_system+'_usergui_' + client.logintoken, JSON.stringify({
-                command: 'usergui-changed',
-                client: data
-            }), 'EX', 60 * 60 / 2);
-            if(data.data.user.gui){
-                    deferred.resolve(data);
-                }
-            else{
-                    deferred.reject(new Error('Error user not login'))
-            }   
-    
+            setUserGUIStatus(client, data.data.user.gui);
+            if (data.data.user.gui) {
+                deferred.resolve(data);
+            } else {
+                deferred.reject(new Error('Error user not login'))
+            }
+
         });
         ws_client.on("error", (err) => {
             //js.client.data.message=err;
-                r_client.set(_current_system+'_error_' + client.gui, JSON.stringify({
-                    command: 'error-changed',
-                    err: err
-                }), 'EX', 60 * 5);
+            setErrorStatus(client);
             deferred.reject(err);
-                
+
         });
     } catch (error) {
         console.log(error);
         //js.client.data.message=error;
-        r_client.set(_current_system+'_error_' + client.gui, JSON.stringify({
-            command: 'error-changed',
-            err: err
-        }), 'EX', 60 * 5);
+        setErrorStatus(client);
         deferred.reject(error);
     }
 
     return deferred.promise;
 }
+
 function register_gij_ws(js) {
     let deferred = Q.defer();
     try {
-        findGijPocketByGUI(js.client.data.user.gui).then(res=>{
-            if(res){
-                js.client.data.message=new Error('Error pocket exist');
+        findGijPocketByGUI(js.client.data.user.gui).then(res => {
+            if (res) {
+                js.client.data.message = new Error('Error pocket exist');
                 deferred.reject(js);
-            }else{
-                let db=create_db('gijpocket')
-            
+            } else {
+                let db = create_db('gijpocket')
                 const p = {
                     gui: uuidV4(),
                     usergui: js.client.data.user.gui,
                     createddate: convertTZ(new Date()),
                     totalvalue: 0,
                     totalspent: 0,
-                }
-                db.insert(p,p.gui,(err,res)=>{
-                    if(err){
-                        js.client.data.message=err;
+                };
+                db.insert(p, p.gui, (err, res) => {
+                    if (err) {
+                        js.client.data.message = err;
                         deferred.reject(js);
-                    }esle{
-                        js.client.data.message='OK register';
+                    } else {
+                        js.client.data.message = 'OK register';
+                        filterObject(js.client.data);
                         deferred.resolve(js);
                     }
-                })
+                });
             }
-        }).catch(err=>{
-            js.client.data.message=err;
+        }).catch(err => {
+            js.client.data.message = err;
             deferred.reject(js);
         });
     } catch (error) {
-        js.client.data.message=error;
+        js.client.data.message = error;
         deferred.reject(js);
     }
-    
+
     return deferred.promise;
 }
-function findGijPocketByGUI(gui){
-        let deferred = Q.defer();
-        let db=create_db('gijpocket');
-        db.view(__design_view,'findByUserGUI',{key:gui,limit:1},(err,res)=>{
-            if(err) deferred.reject(err);
-            else{
-                if(res.rows.length){
-                    deferred.resolve(res.rows[0].value);
-                }else{
-                    deferred.reject('');
-                }
+
+function findGijPocketByGUI(gui) {
+    let deferred = Q.defer();
+    let db = create_db('gijpocket');
+    db.view(__design_view, 'findByPocketGUI', {
+        key: gui + '',
+        limit: 1
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            if (res.rows.length) {
+                deferred.resolve(res.rows[0].value);
+            } else {
+                deferred.reject('');
             }
-        });
-        return deferred.promise;
-    }
-    function getPocketByUserGUI(ugui){
-        let deferred=Q.defer();
-        let db=create_db('gijpocket');
-        db.view(__design_view,'findByPocketGUI',{key:gui,limit:1},(err,res)=>{
-            if(err) deferred.reject(err);
-            else{
-                if(res.rows.length){
-                    deferred.resolve(res.rows[0].value);
-                }else{
-                    deferred.reject('');
-                }
-            }
-        });
-        return deferred.promise;
-    }
-    function check_pocket_ws(js){
-        let deferred=Q.defer();
-        try {
-            getPocketByUserGUI(js.client.data.user.gui).then(res=>{
-                if(res){
-                    js.client.data.message='OK'
-                    js.client.data.gijpocket=res;
-                }else{
-                    js.client.data.message=new Error('Error no pocket');
-                    deferred.reject(js);
-                }
-                
-            }).catch(err=>{
-                js.client.data.message=err;
-                deferred.reject(js);
-            });
-        } catch (error) {
-            js.client.data.message=error;
-            deferred.reject(js);
         }
-        
-        return deferred.promise;
-    }
-    function check_exist_pocket(gui){
-        let deferred = Q.defer();
-        findGijPocketByGUI(gui).then(res=>{
-            let arr=[];
-            for (let index = 0; index < res.rows.length; index++) {
-                const element = res.rows[index].value;
-                arr.push(element);
+    });
+    return deferred.promise;
+}
+
+function getPocketByUserGUI(ugui) {
+    let deferred = Q.defer();
+    let db = create_db('gijpocket');
+    db.view(__design_view, 'findByUserGUI', {
+        key: gui + '',
+        limit: 1
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            if (res.rows.length) {
+                deferred.resolve(res.rows[0].value);
+            } else {
+                deferred.reject('');
             }
-            deferred.resolve(arr);
-        }).catch(err=>{
+        }
+    });
+    return deferred.promise;
+}
+
+function check_pocket_ws(js) {
+    let deferred = Q.defer();
+    try {
+        getPocketByUserGUI(js.client.data.user.gui).then(res => {
+            if (res) {
+                js.client.data.message = 'OK'
+                js.client.data.gijpocket = res;
+                filterObject(js.client.data);
+                deferred.resolve(js);
+            } else {
+                js.client.data.message = new Error('Error no pocket');
+                deferred.reject(js);
+            }
+        }).catch(err => {
+            js.client.data.message = err;
+            deferred.reject(js);
+        });
+    } catch (error) {
+        js.client.data.message = error;
+        deferred.reject(js);
+    }
+
+    return deferred.promise;
+}
+
+function check_exist_pocket(gui) {
+    let deferred = Q.defer();
+    findGijPocketByGUI(gui).then(res => {
+        let arr = [];
+        for (let index = 0; index < res.rows.length; index++) {
+            const element = res.rows[index].value;
+            arr.push(element);
+        }
+        deferred.resolve(arr);
+    }).catch(err => {
+        deferred.reject(err);
+    });
+    return deferred.promise;
+}
+
+function getCountGij(pgui) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    try {
+        db.view(__design_view, 'countByPocketGUI', {
+            key: pgui + ''
+        }, (err, res) => {
+            if (err) deferred.reject(err);
+            else {
+                if (res.rows.length) {
+                    deferred.resolve(rews.rows[0].value);
+                } else {
+                    deferred.reject(new Error('ERROR no gij found'));
+                }
+            }
+        });
+    } catch (error) {
+        deferred.reject(error);
+    }
+    return deferred.promise;
+}
+
+function getGijList(pgui, page, maxpage) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    try {
+        getCountGij(pgui).then(res => {
+            let count = res;
+            if (!maxpage || maxpage === undefined || maxpage > 100)
+                maxpage = 10;
+            if (!page || page === undefined)
+                page = 1;
+            db.view(__design_view, 'findByPocketGUI', {
+                key: pgui + '',
+                limit: maxpage,
+                skip: page,
+                descending: true
+            }, (err, res) => {
+                if (err) deferred.reject(err);
+                else {
+                    let arr = [];
+                    for (let index = 0; index < res.rows.length; index++) {
+                        const element = res.rows[index].value;
+                        arr.push(element)
+                    }
+                    deferred.resolve({
+                        arr: arr,
+                        count: count
+                    })
+                }
+            });
+        }).catch(err => {
             deferred.reject(err);
         });
-        return deferred.promise;
+    } catch (error) {
+        deferred.reject(error);
     }
-    function getCountGij(pgui){
-        let deferred = Q.defer();
-        let db=create_db('usergij');
-        try {
-            db.view(__design_view,'countByPocketGUI',{key:pgui},(err,res)=>{
-                if(err)deferred.reject(err);
-                else{
-                    if(res.rows.length){
-                        deferred.resolve(rews.rows[0].value);
-                    }else{
-                        deferred.reject(new Error('ERROR no gij found'));
-                    }
-                }
-            });
-        } catch (error) {
-            deferred.reject(error);
+    return deferred.promise;
+}
+
+function check_gij_ws(js) {
+    let deferred = Q.defer();
+    try {
+        check_exist_pocket(js.client.data.user.gui).then(res => {
+            if (res.length) {
+                let p = res[0];
+                getGijList(p.gijpocketgui, js.client.data.page, js.client.data.maxpage).then(g => {
+                    js.client.data.gijs = g;
+                    js.client.data.gijpocket = p;
+                    filterObject(js.client.data);
+                    deferred.resolve(js);
+                }).catch(err => {
+                    js.client.data.message = err;
+                    deferred.reject(js);
+                });
+            } else {
+                js.client.data.message = new Error('ERROR pocket not found');
+                deferred.reject(js);
+            }
+        }).catch(err => {
+            js.client.data.message = err;
+            deferred.reject(js);
+        });
+    } catch (error) {
+        js.client.data.message = error
+        deferred.reject(js);
+    }
+
+    return deferred.promise;
+}
+
+function getSumPocketFromGij(js) {
+    let deferred = Q.defer();
+    try {
+        var usergij = {
+            usergui: '',
+            sn: '',
+            gijgui: '',
+            gijvalue: 0,
+            usedtime: '',
+            ref: [],
+            gijpocketgui: '',
         }
-        return deferred.promise;
-    }
-    function getGijList(pgui,page,maxpage){
-        let deferred = Q.defer();
-        let db=create_db('usergij');
-        try {
-            getCountGij(pgui).then(res=>{
-                let count=res;
-                if(!maxpage||maxpage===undefined||maxpage>100)
-                    maxpage=10;
-                if(!page||page===undefined)
-                    page=1;
-                db.view(__design_view,'findByPocketGUI',{key:pgui,limit:maxpage,skip:page,descending:true},(err,res)=>{
-                    if(err)deferred.reject(err);
-                    else{
-                        let arr=[];
-                        for (let index = 0; index < res.rows.length; index++) {
-                            const element = res.rows[index].value;
-                            arr.push(element)
-                        }
-                        deferred.resolve({arr:arr,count:count})
+        let db = create_db('usergij');
+        db.view(__design_view, 'sumAllGij', {
+            key: js.client.data.gijpocket.gui + ''
+        }, (err, res) => {
+            if (err) deferred.reject(err);
+            else {
+                const summAll = res.rows[0].value;
+                db.view(__design_view, 'sumSpent', {
+                    key: js.client.data.gijpocket.gui + ''
+                }, (err, res) => {
+                    if (err) deferred.reject(err);
+                    else {
+                        const sumSpent = res.rows[0].value;
+                        deferred.resolve({
+                            total: sumAll,
+                            spent: sumSpent
+                        });
                     }
                 });
-            }).catch(err=>{
-                deferred.reject(err);
-            });
-        } catch (error) {
-            deferred.reject(error);
-        }
-        return deferred.promise;
-    }
-    function cleanGijList(gij){
-        for (let index = 0; index < gij.length; index++) {
-            const element = gij[index];
-            element.gui='';
-            element._id='';
-            element._rev='';
-            element.usergui='';
-            element.gijpocketgui='';
-        }
-    }
-    function cleanPocket(p){
-        for (let index = 0; index < p.length; index++) {
-            const element = p[index];
-            element.gui='';
-            element._id='';
-            element._rev='';
-            element.usergui='';            
-        }
-    }
-    function check_gij_ws(js) {
-        let deferred = Q.defer();
-        try {
-            check_exist_pocket(js.client.data.user.gui).then(res=>{
-                if(res.length){                    
-                    let p=res[0];                            
-                    getGijList(p.gijpocketgui,js.client.data.page,js.client.data.maxpage).then(g=>{
-                        cleanGijList(g);
-                        cleanPocket(res);
-                        js.client.data.gijlist=g;
-                        deferred.resolve(js);
-                    }).catch(err=>{
-                        js.client.data.message=err;
-                        deferred.reject(js);
-                    });
-                }else{
-                    js.client.data.message=new Error('ERROR pocket not found');
-                    deferred.reject(js);
-                }
-            }).catch(err=>{
-                js.client.data.message=err;
-                deferred.reject(js);
-            });            
-        } catch (error) {
-            js.client.data.message=error
-            deferred.reject(js);
-        }
-        
-        return deferred.promise;
-    }
-    function getSumPocketFromGij(js){
-        let deferred=Q.defer();
-        try {
-            var usergij = {
-                usergui: '',
-                sn:'',
-                gijgui: '',
-                gijvalue: 0,
-                usedtime: '',
-                ref: '',
-                gijpocketgui: '',
             }
-            let db=create_db('usergij');
-            db.view(__design_view,'sumAllGij',{key:js.client.data.gijpocket.gui},(err,res)=>{
-                if(err) deferred.reject(err);
-                else{
-                    const summAll=res.rows[0].value;
-                    db.view(__design_view,'sumSpent',{key:js.client.data.gijpocket.gui},(err,res)=>{
-                        if(err) deferred.reject(err);
-                        else{
-                            const sumSpent=res.rows[0].value;
-                            deferred.resolve({total:sumAll,spent:sumSpent});
-                        }
-                    });
-                }
-            });
-        } catch (error) {
-            deferred.reject(error);
-        }
-        return deferred.promise;
+        });
+    } catch (error) {
+        deferred.reject(error);
     }
-    function sum_gij_ws(js){
-        let deferred=Q.defer();
-        try {
-            check_exist_pocket(js.client.data.user.gui).then(res=>{
-                if(res.length){                    
-                    let p=res[0];          
-                    js.client.data.gijpocket=p;                  
-                    getSumPocketFromGij(js).then(res=>{
-                        if(res){
-                            js.client.data.message='OK gij sum';
-                            deferred.resolve(js);   
-                        }else{
-                            js.client.data.message='ERROR could not sum gij';
+    return deferred.promise;
+}
+
+function updateUser(js) {
+    let client = js.client;
+    client.prefix = 'gij';
+    client.data.command = 'edit-profile';
+    let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
+    ws_client.on('open', function open() {
+        ws_client.send(JSON.stringify(client), function (err) {
+            if (err)
+                setErrorStatus(client);
+        });
+    });
+    ws_client.on('message', function incoming(data) {
+        client = JSON.parse(data);
+        delete data.prefix;
+        //delete data.res.SendSMSResult.user_id;
+        setNotificationStatus(client);
+        setOnlineStatus(client);
+    });
+    ws_client.on("error", (err) => {
+        setErrorStatus(client);
+    });
+
+    return deferred.promise;
+}
+
+function updateGijPocket(gp) {
+    let deferred = Q.defer();
+    try {
+        let db = create_db('gijpocket');
+        console.log(gp);
+        db.insert(gp, gp._id, function (err, res) {
+            if (err) deferred.reject(err);
+            else {
+                deferred.resolve('OK ' + JSON.stringify(res));
+            }
+        });
+    } catch (error) {
+        deferred.reject(error)
+    }
+
+    return deferred.promise;
+}
+
+function sum_gij_ws(js) {
+    let deferred = Q.defer();
+    try {
+        check_exist_pocket(js.client.data.user.gui).then(res => {
+            if (res.length) {
+                let p = res[0];
+                js.client.data.gijpocket = p;
+                getSumPocketFromGij(js).then(sum => {
+                    if (sum) {
+                        findUserByGUI(js).then(res => {
+                            js.client.data.message = 'OK gij sum';
+                            res.totalgij = sum.sumAll;
+                            res.totalgijspent = sum.sumSpent;
+                            res.gijvalue = res.totalgij - res.totalgijspent;
+
+                            p.totalvalue = res.gijvalue;
+                            p.totalgij = res.totalgij;
+                            p.totalgijspent = res.totalgijspent;
+
+                            js.client.data.gijpocket = p;
+                            js.client.data.user = res;
+                            updateUser(js).then(res => {
+                                js.client.data.message = 'OK gij sum Ok update user';
+                                deferred.resolve(js);
+                                updateGijPocket(p).then(res => {
+                                    js.client.data.message = 'OK gij sum Ok update user OK Update gijpocket';
+                                    filterObject(js.client.data);
+                                    deferred.resolve(js);
+                                }).catch(err => {
+                                    js.client.data.message = err;
+                                    deferred.reject(js);
+                                });
+                            }).catch(err => {
+                                js.client.data.message = err;
+                                deferred.reject(js);
+                            });
+                        }).catch(err => {
+                            js.client.data.message = err;
                             deferred.reject(js);
-                        }
-                    }).catch(err=>{
-                        js.client.data.message=err;
+                        });
+                    } else {
+                        js.client.data.message = 'ERROR could not sum gij';
                         deferred.reject(js);
-                    });
-                }else{
-                    js.client.data.message=new Error('ERROR pocket not found');
+                    }
+                }).catch(err => {
+                    js.client.data.message = err;
                     deferred.reject(js);
-                }
-            }).catch(err=>{
-                js.client.data.message=err;
+                });
+            } else {
+                js.client.data.message = new Error('ERROR pocket not found');
                 deferred.reject(js);
-            });            
-        } catch (error) {
-            js.client.data.message=error
+            }
+        }).catch(err => {
+            js.client.data.message = err;
             deferred.reject(js);
+        });
+    } catch (error) {
+        js.client.data.message = error
+        deferred.reject(js);
+    }
+    return deferred.promise;
+}
+
+function check_payment_ws(js) {
+    let deferred = Q.defer();
+
+    return deferred.promise;
+}
+
+function check_payment_ws(js) {
+    let deferred = Q.defer();
+
+    return deferred.promise;
+}
+
+function findUserByGUI(js) {
+    let deferred = Q.defer();
+    let client = js.client;
+    client.prefix = 'gij';
+    client.data.command = 'get-user-info';
+    let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
+    ws_client.on('open', function open() {
+        ws_client.send(JSON.stringify(client), function (err) {
+            if (err) {
+                setErrorStatus(client);
+                js.client.data.message = err;
+                deferred.reject(js);
+            }
+        });
+    });
+    ws_client.on('message', function incoming(data) {
+        client = JSON.parse(data);
+        delete client.prefix;
+        //delete data.res.SendSMSResult.user_id;
+        setNotificationStatus(client);
+        setOnlineStatus(client);
+        js.client = client;
+        deferred.resolve(js)
+    });
+    ws_client.on("error", (err) => {
+        setErrorStatus(client);
+        js.client.data.message = err;
+        deferred.reject(js);
+    });
+    return deferred.promise;
+}
+
+function findUserByUsername(js) {
+    let deferred = Q.defer();
+    let client = js.client;
+    client.data.command = 'find-by-username';
+    ws_client.on('open', function open() {
+        ws_client.send(JSON.stringify(client), function (err) {
+            if (err) {
+                setErrorStatus(client);
+                js.client.data.message = err;
+                deferred.reject(js);
+            }
+        });
+    });
+    ws_client.on('message', function incoming(data) {
+        client = JSON.parse(data);
+        delete data.prefix;
+        //delete data.res.SendSMSResult.user_id;
+        setNotificationStatus(client);
+        setOnlineStatus(client);
+        js.client = client;
+        deferred.resolve(js)
+    });
+    ws_client.on("error", (err) => {
+        setErrorStatus(client);
+        js.client.data.message = err;
+        deferred.reject(js);
+    });
+    return deferred.promise;
+}
+
+function countAvailableGij(pgui) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    db.view(__design_view, 'countAvailableGij', {
+        key: pgui + ''
+    }, function (err, res) {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < res.rows.length; index++) {
+                const element = res.rows[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr[0]);
         }
-        return deferred.promise;
+    });
+}
+
+function findAvailableGij(pgui) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    db.view(__design_view, 'findAvailableGij', {
+        key: pgui + ''
+    }, function (err, res) {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < res.rows.length; index++) {
+                const element = res.rows[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr);
+        }
+    });
+}
+
+function getAvailableGij(pgui, page, maxpage) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    countAvailableGij(pgui).then(res => {
+        let count = res;
+        db.view(__design_view, 'findAvailableGij', {
+            key: pgui + '',
+            limit: maxpage,
+            skip: page
+        }, function (err, res) {
+            if (err) deferred.reject(err);
+            else {
+                let arr = [];
+                for (let index = 0; index < res.rows.length; index++) {
+                    const element = res.rows[index].value;
+                    arr.push(arr);
+                }
+                deferred.resolve({
+                    arr: arr,
+                    count: count
+                });
+            }
+        });
+    }).catch(err => {
+        deferred.reject(err);
+    });
+    return deferred.promise;
+}
+
+function countUsedGij(pgui) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    db.view(__design_view, 'countUsedGij', {
+        key: pgui + ''
+    }, function (err, res) {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < res.rows.length; index++) {
+                const element = res.rows[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr[0]);
+        }
+    });
+}
+
+function findUsedGij(pgui) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    db.view(__design_view, 'findUsedGij', {
+        key: pgui + ''
+    }, function (err, res) {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < res.rows.length; index++) {
+                const element = res.rows[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr);
+        }
+    });
+    return deferred.promise;
+}
+
+function getUsedGij(pgui, page, maxpage) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    countUsedGij(pgui).then(res => {
+        let count = res;
+        db.view(__design_view, 'findUsedGij', {
+            key: pgui + '',
+            limit: maxpage,
+            skip: page
+        }, function (err, res) {
+            if (err) deferred.reject(err);
+            else {
+                let arr = [];
+                for (let index = 0; index < res.rows.length; index++) {
+                    const element = res.rows[index].value;
+                    arr.push(arr);
+                }
+                deferred.resolve({
+                    arr: arr,
+                    count: count
+                });
+            }
+        });
+    }).catch(err => {
+        deferred.reject(err);
+    });
+    return deferred.promise;
+}
+
+function sumArray(arr, prop, isaverage) {
+    let sum = 0;
+    try {
+        for (let index = 0; index < arr.length; index++) {
+            sum += Int.parse(arr[index][prop] + '');
+        }
+    } catch (error) {
+        throw error;
     }
-    function check_payment_ws(js) {
-        let deferred = Q.defer();
+    return isaverage || isaverage !== undefined ? sum / arr.length : sum;
+}
 
-        return deferred.promise;
+function updateUserGij(g) {
+    let deferred = Q.defer();
+    let db = create_db('usergij');
+    db.insert(g, g._id, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            deferred.resolve(res);
+        }
+    });
+    return deferred.promise;
+}
+
+function updateGijPayment(t) {
+    let deferred = q.defer();
+    let db = create_db('gijpayment');
+    db.insert(t, t.gui, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            deferred.resolve('OK');
+        }
+    });
+    return deferred.promise;
+}
+
+function transfer_gij_ws(js) {
+    let deferred = Q.defer();
+    let sendGij = js.client.data.payment.sendingvalue;
+    let receiveGij = js.client.data.payment.receivingvalue;
+    js.client.data.payment.transactiontime = convertTZ(new Date());
+    js.client.data.payment.gui = uuidV4();
+    js.client.data.payment.sender = js.client.username;
+    //js.client.data.gijtransaction.ref=
+    try {
+        if (sendGij == receiveGij) {
+            findUserByGUI(js).then(res => {
+                let sender = res;
+                js.client.data.user = {};
+                js.client.data.user.username = js.client.data.payment.receiver;
+                findUserByUsername(js).then(res => {
+                    if (res) {
+                        let reciver = res;
+                        getPocketByUserGUI(sender.gui).then(res => {
+                            if (res) {
+                                let senderpocket = res;
+                                getPocketByUserGUI(sender.gui).then(res => {
+                                    if (res) {
+                                        let recieverpocket = res;
+                                        findAvailableGij(senderpocket.gui).then(res => {
+                                            let s_a_gij = res;
+                                            findUsedGij(recieverpocket.gui).then(res => {
+                                                let s_u_gij = res;
+                                                findAvailableGij(recieverpocket.gui).then(res => {
+                                                    let r_a_gij = res;
+                                                    findUsedGij(recieverpocket.gui).then(res => {
+                                                        let r_u_gij = res;
+                                                        // check gij and pocket  for both  sender and receiver
+                                                        //check usued
+                                                        //check available
+                                                        const rsumu = sumArray(r_u_gij, 'gijvalue');
+                                                        const rsuma = sumArray(r_a_gij, 'gijvalue');
+                                                        const ssumu = sumArray(s_a_gij, 'gijvalue');
+                                                        const ssumu = sumArray(s_u_gij, 'gijvalue');
+                                                        // check with gij pocket
+                                                        if (recieverpocket.totalgij === (rsuma + rsumu)) {
+                                                            if (recieverpocket.totalspent <= rsumu) {
+                                                                if (recieverpocket.gijvalue <= rsuma) {
+                                                                    if (senderpocket.totalgij === (ssuma + ssumu)) {
+                                                                        if (senderpocket.totalspent <= ssumu) {
+                                                                            if (senderpocket.gijvalue <= ssuma) {
+                                                                                // move gij from sender to reciever
+                                                                                let gijpayment = {
+                                                                                    gui: uuidV4(),
+                                                                                    usergui: this.client.data.user.gui,
+                                                                                    paymenttime: convertTZ(new Date()),
+                                                                                    payemntvalue: Int.parse(js.client.data.payment.sendGij + ''),
+                                                                                    ref: uuidV4(),
+                                                                                    sender: js.client.data.payment.sender,
+                                                                                    receiver: js.client.data.payment.receiver,
+                                                                                    paymentype:'transfer',
+                                                                                    sendingvalue: Int.parse(js.client.data.payment.sendingvalue + ''),
+                                                                                    receivingvalue: Int.parse(js.client.data.payment.receivingvalue + ''),
+                                                                                }
+                                                                                if (sendGij < ssuma) {
+                                                                                    let aver = ssumu / s_a_gij.length;
+                                                                                    if (sendGij / aver < 1) {
+                                                                                        js.client.data.message = new Error('ERROR the value is lower than individual gij');
+                                                                                        deferred.reject(js);
+                                                                                    } else {
+                                                                                        updateGijPayment(gijpayment).then(res => {
+                                                                                            // transfer gijs from current user to target user and sum all 
+                                                                                            for (let index = 0; index < s_a_gij.length; index++) {
+                                                                                                const element = s_a_gij[index];
+                                                                                                if(element.gijvalue*i<sendGij){
+                                                                                                    //element.usedtime=convertTZ(new Date());
+                                                                                                    element.usergui=recieverpocket.usergui;                                                                                                    
+                                                                                                    element.gijpocketgui=recieverpocket.gui;
+                                                                                                    element.ref.push(gijpayment.gui);
+                                                                                                }                                                                                                    
+                                                                                            }
+                                                                                            updateUserGij(s_a_gij).then(res => {
+                                                                                                // update gij pocket  
+                                                                                                recieverpocket.totalgij +=sendGij
+                                                                                                recieverpocket.totalvalue +=sendGij;
+                                                                                                recieverpocket.sumgij+sendGij;
+                                                                                                updateGijPocket(recieverpocket).then(res => {
+                                                                                                    //updateUserGij(s_a_gij).then(res=>{                                                                                                
+                                                                                                    senderpocket.totalgij -=sendGij;
+                                                                                                    senderpocket.totalspent +=sendGij;
+                                                                                                    //senderpocket.sumgij+=send;
+                                                                                                    updateGijPocket(senderpocket).then(res => {
+                                                                                                        js.client.data.message = 'OK transfered :' + sendGij;
+                                                                                                        deferred.resolve(js);
+                                                                                                    }).catch(err => {
+                                                                                                        js.client.data.message = err;
+                                                                                                        deferred.reject(js);
+                                                                                                    });
+                                                                                                }).catch(err => {
+                                                                                                    js.client.data.message = err;
+                                                                                                    deferred.reject(js);
+                                                                                                });
+                                                                                            }).catch(err => {
+                                                                                                js.client.data.message = err;
+                                                                                                deferred.reject(js);
+                                                                                            });
+                                                                                        }).catch(err => {
+                                                                                            js.client.data.message = err;
+                                                                                            deferred.reject(js);
+                                                                                        });
+                                                                                    }
+
+                                                                                } else {
+                                                                                    js.client.data.message = new Error('ERROR unsufficience fund');
+                                                                                    deferred.reject(js);
+                                                                                }
+
+                                                                            } else {
+                                                                                js.client.data.message = new Error('Error sender has wrong  gij value');
+                                                                                deferred.reject(js);
+                                                                            }
+                                                                        } else {
+                                                                            js.client.data.message = new Error('Error sender has wrong spent gij value');
+                                                                            deferred.reject(js);
+                                                                        }
+                                                                    } else {
+                                                                        js.client.data.message = new Error('Error sender has wrong total gij value');
+                                                                        deferred.reject(js);
+                                                                    }
+                                                                } else {
+                                                                    js.client.data.message = new Error('Error receiver has wrong gij value');
+                                                                    deferred.reject(js);
+                                                                }
+                                                            } else {
+                                                                js.client.data.message = new Error('Error receiver has wrong spent gij value');
+                                                                deferred.reject(js);
+                                                            }
+                                                        } else {
+                                                            js.client.data.message = new Error('Error receiver has wrong total gij value');
+                                                            deferred.reject(js);
+                                                        }
+
+                                                    }).catch(err => {
+                                                        js.client.data.message = err;
+                                                        deferred.reject(js);
+                                                    });
+                                                }).catch(err => {
+                                                    js.client.data.message = err;
+                                                    deferred.reject(js);
+                                                });
+                                            }).catch(err => {
+                                                js.client.data.message = err;
+                                                deferred.reject(js);
+                                            });
+                                        }).catch(err => {
+                                            js.client.data.message = err;
+                                            deferred.reject(js);
+                                        });
+                                    } else {
+                                        js.client.data.message = new Error('ERROR has no pocket');
+                                        deferred.reject(js);
+                                    }
+                                }).catch(err => {
+                                    js.client.data.message = err;
+                                    deferred.reject(js);
+                                });
+                            } else {
+                                js.client.data.message = new Error('ERROR has no pocket');
+                                deferred.reject(js);
+                            }
+                        }).catch(err => {
+                            js.client.data.message = err;
+                            deferred.reject(js);
+                        });
+                    } else {
+                        js.client.data.message = new Error('ERROR target user not found');
+                        deferred.reject(js);
+                    }
+                }).catch(err => {
+                    js.client.data.message = err;
+                    deferred.reject(js);
+                });
+            }).catch(err => {
+                js.client.data.message = err;
+                deferred.reject(js);
+            });
+        }
+    } catch (error) {
+        js.client.data.message = err;
+        deferred.reject(js);
     }
 
-    function check_payment_ws(js) {
-        let deferred = Q.defer();
 
-        return deferred.promise;
+    return deferred.promise;
+}
+
+
+function submit_topup_gij_request(js) {
+    let deferred = Q.defer();
+
+    return deferred.promise;
+}
+
+function list_topup_gij_request(js) {
+    let deferred = Q.defer();
+
+    return deferred.promise;
+}
+
+function update_topup_gij_request(js) {
+    let deferred = Q.defer();
+
+    return deferred.promise;
+}
+
+function filterObject(obj) {
+    var need = ['gui', '_rev', '_id', 'password', 'oldphone', 'system', 'parents', 'roles', 'isActive'];
+    //console.log(key);
+    for (var i in obj) {
+        //if(i==='password')
+        //console.log(obj[i]);
+        for (x = 0; x < need.length; x++) {
+            let key = need[x];
+            if (!obj.hasOwnProperty(i)) {} else if (Array.isArray(obj[i])) {
+                obj[i] = '';
+            } else if (typeof obj[i] == 'object') {
+                filterObject(obj[i], need);
+            } else if (i.indexOf(key) > -1) {
+                obj[i] = '';
+            }
+        }
     }
+    return obj;
+}
+wss.on('connection', function connection(ws, req) {
+    const ip = req.connection.remoteAddress;
+    console.log('connection from ' + ip);
+    //const ip = req.headers['x-forwarded-for'];
+    ws.isAlive = true;
+    //ws.on('pong', heartbeat);
+    ws.on('error', function (err) {
+        //js.client.data.message=JSON.stringify(err);
+        var l = {
+            log: err,
+            logdate: convertTZ(new Date()),
+            type: "error",
+            gui: uuidV4()
+        };
+        errorLogging(l);
+    })
+    ws.on('message', function incoming(data) {
+        let js = {};
+        js.client = data = JSON.parse(data);
+        js.ws = ws;
+        ws.client = data;
+        commandReader(js).then(res => {
 
-    function transfer_gij_ws(js) {
-        let deferred = Q.defer();
-
-        return deferred.promise;
-    }
-
-
-    function submit_topup_gij_request(js) {
-        let deferred = Q.defer();
-
-        return deferred.promise;
-    }
-
-    function list_topup_gij_request(js) {
-        let deferred = Q.defer();
-
-        return deferred.promise;
-    }
-
-    function update_topup_gij_request(js) {
-        let deferred = Q.defer();
-
-        return deferred.promise;
-    }
-    function cleanJSONGUI(data){
-
-    }
-    wss.on('connection', function connection(ws, req) {
-        const ip = req.connection.remoteAddress;
-        console.log('connection from ' + ip);
-        //const ip = req.headers['x-forwarded-for'];
-        ws.isAlive = true;
-        //ws.on('pong', heartbeat);
-        ws.on('error', function (err) {
-            //js.client.data.message=JSON.stringify(err);
+            // CLEAN ALL GUI BEFORE SEND OUT
+            filterObject(js.client.data); // TODO HERE 
+            ws.send(JSON.stringify(js.client));
+        }).catch(err => {
+            js = err;
             var l = {
-                log: err,
+                log: js.client.data.message,
                 logdate: convertTZ(new Date()),
                 type: "error",
                 gui: uuidV4()
             };
+            //console.log(err);
             errorLogging(l);
-        })
-        ws.on('message', function incoming(data) {
-            let js = {};
-            js.client = data = JSON.parse(data);
-            js.ws = ws;
-            ws.client = data;
-            commandReader(js).then(res => {
-
-                // CLEAN ALL GUI BEFORE SEND OUT
-                cleanJSONGUI(js.client.data); // TODO HERE 
-                ws.send(JSON.stringify(js.client));
-            }).catch(err => {
-                js = err;
-                var l = {
-                    log: js.client.data.message,
-                    logdate: convertTZ(new Date()),
-                    type: "error",
-                    gui: uuidV4()
-                };
-                //console.log(err);
-                errorLogging(l);
-                console.log('ws sending');
-                js.client.data.message = js.client.data.message.message;
-                ws.send(JSON.stringify(js.client));
-            });
+            console.log('ws sending');
+            js.client.data.message = js.client.data.message.message;
+            ws.send(JSON.stringify(js.client));
         });
+    });
 
-    });
-    server.listen(8888, "0.0.0.0", function () {
-        console.log('Example app listening on port 8888!')
-    });
+});
+server.listen(8888, "0.0.0.0", function () {
+    console.log('Example app listening on port 8888!')
+});
