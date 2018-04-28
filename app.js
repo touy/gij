@@ -17,6 +17,7 @@ var usergij = {
     gijvalue: 0,
     usedtime: '',
     ref: [],
+    owners:[],
     gijpocketgui: '',
 }
 var gijpocket = {
@@ -157,8 +158,19 @@ var __design_gijpayment = {
         "findPaymentRef": {
             "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref],doc);\r\n    }\r\n}"
         },
-        "findPaymenTime": {
-            "map": "function(doc) {\r\n   emit([doc.paymenttime],doc);\r\n    }"
+        "findPaymentTime": {
+            "map": `function (doc) {
+                var d = new Date(doc.paymenttime);
+                             if (d != null) {
+                                 var key = [d.getFullYear(),
+                                            (d.getMonth()+1),
+                                            d.getDate()];
+                                            
+                                     emit(key, doc);
+                             }
+                             
+                             //emit(null,d.getMonth());
+             }`
         },
         "countPaymenTime": {
             "reduce": "_count",
@@ -174,7 +186,6 @@ var __design_gijpayment = {
     "language": "javascript"
 };
 initDB();
-
 function initDB() {
     init_db('gij', __design_gij);
     init_db('usergij', __design_usergij);
@@ -556,47 +567,35 @@ function commandReader(js) {
                         deferred.reject(err);
                     });
                     break;
-                case 'check-payment':
-                    check_payment_ws(js).then(res => {
+                case 'get-payment-list':
+                    get_payment_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
-
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
                     });
-                    break;
+                    break;                
+                // case 'topup-gij-request':
+                //     topup_gij_ws(js).then(res => {
+                //         deferred.resolve(res);
+                //         //console.log(res);
 
-                case 'list-transfer-gij':
-                    check_payment_ws(js).then(res => {
-                        deferred.resolve(res);
-                        //console.log(res);
+                //     }).catch(err => {
+                //         //console.log(err);
+                //         deferred.reject(err);
+                //     });
+                //     break;
+                // case 'list-topup-gij-request':
+                //     list_topup_gij_ws(js).then(res => {
+                //         deferred.resolve(res);
+                //         //console.log(res);
 
-                    }).catch(err => {
-                        //console.log(err);
-                        deferred.reject(err);
-                    });
-                    break;
-                case 'topup-gij-request':
-                    topup_gij_ws(js).then(res => {
-                        deferred.resolve(res);
-                        //console.log(res);
-
-                    }).catch(err => {
-                        //console.log(err);
-                        deferred.reject(err);
-                    });
-                    break;
-                case 'list-topup-gij-request':
-                    list_topup_gij_ws(js).then(res => {
-                        deferred.resolve(res);
-                        //console.log(res);
-
-                    }).catch(err => {
-                        //console.log(err);
-                        deferred.reject(err);
-                    });
-                    break;
+                //     }).catch(err => {
+                //         //console.log(err);
+                //         deferred.reject(err);
+                //     });
+                //     break;
                 case 'pay-gij':
                     pay_gij(js).then(res => { // pay for service such as : topup
                         deferred.resolve(res);
@@ -608,6 +607,26 @@ function commandReader(js) {
                     });
                     break;
                 case 'check-gij-stock': // ADMiN ONLY
+                    check_gij_stock_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                    case 'import-gij-stock': // ADMiN ONLY
+                    check_gij_stock_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                    case 'generate-gij-stock': // ADMiN ONLY
                     check_gij_stock_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
@@ -1058,10 +1077,61 @@ function sum_gij_ws(js) {
     }
     return deferred.promise;
 }
+function checkUserName(){
 
-function check_payment_ws(js) {
+}
+function checkPhonenumber(){
+
+}
+function pay_gij(js){
+    const deferred=Q.defer();
+    const db=create_db('gijpayment');
+    getPocketByUserGUI(js.client.data.user.gui).then(res=>{
+        let p_sender=res;
+        findUserByUsername(js.client.data.gijpayment.receiver).then(res=>{
+            let receiver=res;
+            getPocketByUserGUI(js.client.data.user.gui).then(res=>{
+                let p_receiver=res;
+
+            }).catch(err=>{
+                js.client.data.message=err;
+                deferred.reject(js);
+            });
+        }).catch(err=>{
+            js.client.data.message=err;
+            deferred.reject(js);
+        });        
+    }).catch(err=>{
+        js.client.data.message=err;
+        deferred.reject(js);
+    });
+    return deferred.promise;
+}
+function get_payment_ws(js) {
     let deferred = Q.defer();
-
+    let db=create_db('gijpayment');
+    try {
+        db.view(__design_view,'findPaymentTime',
+    {key:{year:js.client.data.paymentlist.year,month:js.client.data.paymentlist.month,date:js.client.data.paymentlist.date},descending:true},
+    (err,res)=>{
+        if(err) {
+            js.client.data.message=err;
+            deferred.reject(js);
+        }else{
+            let arr=[];
+            for (let index = 0; index < res.rows.length; index++) {
+                const element = res.rows[index].value;
+                filterObject(element);
+                arr.push(element);
+            }
+            deferred.resolve(arr);
+        }
+    });
+    } catch (error) {
+        js.client.data.message=error;
+            deferred.reject(js);
+    }
+    
     return deferred.promise;
 }
 
@@ -1368,10 +1438,22 @@ function transfer_gij_ws(js) {
                                                                                             // transfer gijs from current user to target user and sum all 
                                                                                             for (let index = 0; index < s_a_gij.length; index++) {
                                                                                                 const element = s_a_gij[index];
-                                                                                                if(element.gijvalue*i<sendGij){
+                                                                                                if(element.gijvalue*i<=sendGij){
                                                                                                     //element.usedtime=convertTZ(new Date());
                                                                                                     element.usergui=recieverpocket.usergui;                                                                                                    
                                                                                                     element.gijpocketgui=recieverpocket.gui;
+                                                                                                    if(Array.isArray(element.owners))
+                                                                                                        element.owners.push(recieverpocket.usergui);
+                                                                                                    else{
+                                                                                                        element.owners=[];
+                                                                                                        element.owners.push(recieverpocket.usergui);   
+                                                                                                    }                     
+                                                                                                    if(Array.isArray(element.ref))
+                                                                                                        element.ref.push('transfer');
+                                                                                                    else{
+                                                                                                        element.ref=[];
+                                                                                                        element.ref.push('transfer');   
+                                                                                                    }                
                                                                                                     element.ref.push(gijpayment.gui);
                                                                                                 }                                                                                                    
                                                                                             }
@@ -1405,7 +1487,6 @@ function transfer_gij_ws(js) {
                                                                                             deferred.reject(js);
                                                                                         });
                                                                                     }
-
                                                                                 } else {
                                                                                     js.client.data.message = new Error('ERROR unsufficience fund');
                                                                                     deferred.reject(js);
@@ -1435,7 +1516,6 @@ function transfer_gij_ws(js) {
                                                             js.client.data.message = new Error('Error receiver has wrong total gij value');
                                                             deferred.reject(js);
                                                         }
-
                                                     }).catch(err => {
                                                         js.client.data.message = err;
                                                         deferred.reject(js);
@@ -1485,8 +1565,6 @@ function transfer_gij_ws(js) {
         js.client.data.message = err;
         deferred.reject(js);
     }
-
-
     return deferred.promise;
 }
 
