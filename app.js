@@ -1,7 +1,3 @@
-import {
-    EADDRNOTAVAIL
-} from 'constants';
-
 var gij = { // as gij stock
     gui: '',
     sn: '',
@@ -17,32 +13,100 @@ var usergij = {
     gijvalue: 0,
     usedtime: '',
     ref: [],
-    owners:[],
+    owners: [],
     gijpocketgui: '',
 }
 var gijpocket = {
     gui: '',
     usergui: '',
     createddate: '',
-    totalvalue: 0,
-    totalspent: 0,
-    totalgij: 0,
-    sumgij:0,
+    totalvalue: 0, // total value left
+    totalspent: 0, // total spent all time
+    totalgij: 0, // total gij left
+    sumgij: 0, // total gij consumed all time
 }
 var gijpayment = {
     gui: '',
     usergui: '',
     paymenttime: '',
-    payemntvalue: 0,
+    paymentvalue: 0,
     ref: '',
     sender: '',
     receiver: '',
     sendingvalue: 0,
     receivingvalue: 0,
-    paymentype:'',
+    paymentype: '',
+}
+var serviceprovider = {
+    gui: '',
+    servicename: '',
+    description: '',
+    discount: .1
+}
+var package = {
+    gui: '',
+    packagename: '',
+    packagevalue: 0,
+    description: '',
+    createddate: '',
+    serviceprovider: [],
+    isactive: false
+}
+var customers = {
+    gui: '',
+    usergui: '',
+    currentpackage = [{
+        packagegui: '',
+        starttime: '',
+        endtime: '',
+        paymentgui: ''
+    }],
+    createddate: '',
+    lastupdate: '',
+    isactive: true,
+
 }
 
 //*** DESIGN */
+var __design_serviceprovider = {
+    "_id": "_design/objectList",
+    "views": {
+        "findByGUI": {
+            "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+        },
+        "countByGUI": {
+            "reduce": "_count",
+            "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+        }
+    },
+    "language": "javascript"
+};
+var __design_package = {
+    "_id": "_design/objectList",
+    "views": {
+        "findByGUI": {
+            "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+        },
+        "countByGUI": {
+            "reduce": "_count",
+            "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+        }
+    },
+    "language": "javascript"
+};
+var __design_customer = {
+    "_id": "_design/objectList",
+    "views": {
+        "findByUserGUI": {
+            "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+        },
+        "countByUserGUI": {
+            "reduce": "_count",
+            "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+        }
+    },
+    "language": "javascript"
+};
 var __design_gij = {
     "_id": "_design/objectList",
     "views": {
@@ -117,6 +181,7 @@ var __design_usergij = {
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         },
         "countByUserGUI": {
+            "reduce": "_count",
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         },
         "findByPocketGUI": {
@@ -146,6 +211,7 @@ var __design_gijpocket = {
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         },
         "countByUserGUI": {
+            "reduce": "_count",
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         }
     },
@@ -180,17 +246,22 @@ var __design_gijpayment = {
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         },
         "countByUserGUI": {
+            "reduce": "_count",
             "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
         }
     },
     "language": "javascript"
 };
 initDB();
+
 function initDB() {
     init_db('gij', __design_gij);
     init_db('usergij', __design_usergij);
     init_db('gijpocket', __design_gijpocket);
-    init_db('gijpayment', gijpayment);
+    init_db('gijpayment', __design_gijpayment);
+    init_db('gijserviceprovider', __design_serviceprovider);
+    init_db('gijpackage', __design_package);
+    init_db('gijcustomer', __design_customer);
     //init_db('users', __design_users);
 }
 
@@ -434,7 +505,7 @@ function setUserGUIStatus(client, gui) {
     r_client.set(_current_system + '_usergui_' + client.logintoken, JSON.stringify({
         command: 'usergui-changed',
         gui: gui
-    }), 'EX', 60 * 60 / 2);
+    }), 'EX', 60 * 5);
 }
 
 function setLoginStatus(client) {
@@ -459,40 +530,81 @@ function setClientStatus(client) {
 }
 
 function setOnlineStatus(client) {
-    r_client.set('_online_' + client.username, JSON.stringify({
-        command: 'online-changed',
-        client: {
-            username: client.username,
-            onlinetime: convertTZ(new Date()),
-            system: _current_system
-        }
-    }), 'EX', 60 * 30 / 2);
+    try {
+        r_client.get('_online_' + client.username, (err, res) => {
+            if (err) {
+                client.data.message = err;
+                setErrorStatus(client);
+            } else {
+                let arr = [{
+                    logintoken: client.logintoken,
+                    loginip: client.loginip,
+                    clientip: client.clientip,
+                    gui: client.gui
+                }];
+                if (res) {
+                    res = JSON.parse(res);
+                    if (res.client.login !== undefined) {
+                        // res.client.login.push(arr[0]);
+                        // arr=res.login;
+                        let exist = false;
+                        for (let index = 0; index < res.client.login.length; index++) {
+                            const element = res.client.login[index];
+                            if (element.gui === client.gui && element.clientip === client.clientip && element.loginip === client.loginip) {
+                                exist = true;
+                                console.log('exist');
+                                break;
+                            }
+                        }
+                        if (!exist) {
+                            arr = res.client.login.concat(arr);
+                        }
+                    }
+                }
+                r_client.set('_online_' + client.username, JSON.stringify({
+                    command: 'online-changed',
+                    client: {
+                        username: client.username,
+                        onlinetime: convertTZ(new Date()),
+                        system: _current_system,
+                        login: arr,
+                    }
+                }), 'EX', 60 * 5);
+            }
+        });
+    } catch (error) {
+        console.log(error);
+        client.data.message = error;
+        setErrorStatus(client);
+    }
 }
 
 function setErrorStatus(client) {
-    r_client.set(_current_system + '_error_' + client.gui, JSON.stringify({
+    r_client.set(_current_system + '_error_' + client.logintoken, JSON.stringify({
         command: 'error-changed',
         client: client
     }), 'EX', 60 * 5);
 }
 
 function setNotificationStatus(client) {
-    r_client.set(_current_system + '_notification_' + client.gui, JSON.stringify({
+    r_client.set(_current_system + '_notification_' + client.logintoken, JSON.stringify({
         command: 'notification-changed',
         client: data
-    }), 'EX', 60 * 60 / 2); // client side could not see this , the other server as a client can see this .
+    }), 'EX', 60 * 5); // client side could not see this , the other server as a client can see this .
 }
 
-function LTCserviceSMS(client) {
+function LTCserviceSMS(c) {
     try {
+        let client = JSON.parse(JSON.stringify(c));
         client.data.command = 'send-sms'
-        client.prefix = 'user-management';
+        client.prefix = 'gij';
         let ws_client = new WebSocket('ws://nonav.net:8081/'); //ltcservice
+        ws_client.binaryType = 'arraybuffer';
         ws_client.on('open', function open() {
             ws_client.send(JSON.stringify(client), function (err) {
                 if (err) {
                     client.data.message = err;
-                    client.data.sms.content='';
+                    client.data.sms.content = '';
                     setErrorStatus(client);
                 }
                 console.log('socket open...');
@@ -500,27 +612,28 @@ function LTCserviceSMS(client) {
             });
         });
         ws_client.on('message', function incoming(data) {
-            console.log("RECIEVED  FROM SMS : "); 
-            //client = JSON.parse(data);
+            console.log("RECIEVED  FROM SMS : ");
+            client =  JSON.parse(ab2str(data));
             //console.log(client);
-            client.data.sms.content='';
-            client.data['notification'] = 'SMS has been sent out'; 
+            client.data.sms.content = '';
+            client.data['notification'] = 'SMS has been sent out';
             client.prefix = '';
-            
+
             setNotificationStatus(client);
             //setOnlineStatus(client);
-    
+
         });
         ws_client.on("error", (err) => {
-            client.data.message = err;            
+            client.data.message = err;
             setErrorStatus(client);
-        });     
+        });
     } catch (error) {
         client.data.message = err;
         setErrorStatus(client);
     }
-    
+
 }
+
 function commandReader(js) {
     const deferred = Q.defer();
     // const isValid=validateTopup(js.client);
@@ -575,32 +688,40 @@ function commandReader(js) {
                         //console.log(err);
                         deferred.reject(err);
                     });
-                    break;                
-                // case 'topup-gij-request':
-                //     topup_gij_ws(js).then(res => {
-                //         deferred.resolve(res);
-                //         //console.log(res);
+                    break;
+                    // case 'topup-gij-request':
+                    //     topup_gij_ws(js).then(res => {
+                    //         deferred.resolve(res);
+                    //         //console.log(res);
 
-                //     }).catch(err => {
-                //         //console.log(err);
-                //         deferred.reject(err);
-                //     });
-                //     break;
-                // case 'list-topup-gij-request':
-                //     list_topup_gij_ws(js).then(res => {
-                //         deferred.resolve(res);
-                //         //console.log(res);
+                    //     }).catch(err => {
+                    //         //console.log(err);
+                    //         deferred.reject(err);
+                    //     });
+                    //     break;
+                    // case 'list-topup-gij-request':
+                    //     list_topup_gij_ws(js).then(res => {
+                    //         deferred.resolve(res);
+                    //         //console.log(res);
 
-                //     }).catch(err => {
-                //         //console.log(err);
-                //         deferred.reject(err);
-                //     });
-                //     break;
-                case 'pay-gij':
-                    pay_gij(js).then(res => { // pay for service such as : topup
+                    //     }).catch(err => {
+                    //         //console.log(err);
+                    //         deferred.reject(err);
+                    //     });
+                    //     break;
+                case 'pay-gijservice':
+                    pay_gijservice(js).then(res => { // pay for service such as : topup
                         deferred.resolve(res);
                         //console.log(res);
-
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                    break;
+                case 'get-gijpackage':
+                    getGijPackages(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
                     }).catch(err => {
                         //console.log(err);
                         deferred.reject(err);
@@ -616,7 +737,7 @@ function commandReader(js) {
                         deferred.reject(err);
                     });
                     break;
-                    case 'import-gij-stock': // ADMiN ONLY
+                case 'import-gij-stock': // ADMiN ONLY
                     check_gij_stock_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
@@ -626,7 +747,7 @@ function commandReader(js) {
                         deferred.reject(err);
                     });
                     break;
-                    case 'generate-gij-stock': // ADMiN ONLY
+                case 'generate-gij-stock': // ADMiN ONLY
                     check_gij_stock_ws(js).then(res => {
                         deferred.resolve(res);
                         //console.log(res);
@@ -687,7 +808,8 @@ function getUserInfoByLoginToken(js) {
         let client = js.client;
         client.command = 'get-user-gui';
         client.prefix = 'gij';
-        let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
+        let ws_client = new WebSocket('ws://nonav.net:6688/'); // user-management
+        ws_client.binaryType = 'arraybuffer';
         ws_client.on('open', function open() {
             ws_client.send(JSON.stringify(client), function (err) {
                 if (err) {
@@ -697,13 +819,15 @@ function getUserInfoByLoginToken(js) {
             });
         });
         ws_client.on('message', function incoming(data) {
-            client = JSON.parse(data);
+            client =  JSON.parse(ab2str(data));
             delete data.prefix;
             //delete data.res.SendSMSResult.user_id;
             //js.client=data;
             setUserGUIStatus(client, data.data.user.gui);
             if (data.data.user.gui) {
-                deferred.resolve(data);
+                data.data.command = js.client.data.command;
+                js.client = data;
+                deferred.resolve(js);
             } else {
                 deferred.reject(new Error('Error user not login'))
             }
@@ -976,7 +1100,8 @@ function updateUser(js) {
     let client = js.client;
     client.prefix = 'gij';
     client.data.command = 'edit-profile';
-    let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
+    let ws_client = new WebSocket('ws://nonav.net:6688/'); // user-management
+    ws_client.binaryType = 'arraybuffer';
     ws_client.on('open', function open() {
         ws_client.send(JSON.stringify(client), function (err) {
             if (err)
@@ -984,7 +1109,7 @@ function updateUser(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client = JSON.parse(data);
+        client =  JSON.parse(ab2str(data));
         delete data.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -1077,61 +1202,326 @@ function sum_gij_ws(js) {
     }
     return deferred.promise;
 }
-function checkUserName(){
+
+function checkUserName() {
 
 }
-function checkPhonenumber(){
+
+function checkPhonenumber() {
 
 }
-function pay_gij(js){
-    const deferred=Q.defer();
-    const db=create_db('gijpayment');
-    getPocketByUserGUI(js.client.data.user.gui).then(res=>{
-        let p_sender=res;
-        findUserByUsername(js.client.data.gijpayment.receiver).then(res=>{
-            let receiver=res;
-            getPocketByUserGUI(js.client.data.user.gui).then(res=>{
-                let p_receiver=res;
 
-            }).catch(err=>{
-                js.client.data.message=err;
-                deferred.reject(js);
-            });
-        }).catch(err=>{
-            js.client.data.message=err;
-            deferred.reject(js);
-        });        
-    }).catch(err=>{
-        js.client.data.message=err;
-        deferred.reject(js);
+function updateGijServiceProvider(doc) {
+    let deferred = Q.defer();
+    let db = create_db('gijserviceprovider');
+    if (!doc._rev) {
+        doc.gui = uuidV4();
+    }
+    db.insert(doc, doc.gui, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            deferred.resolve(res);
+        }
     });
     return deferred.promise;
 }
-function get_payment_ws(js) {
+
+function getGijServiceProviders(page, maxpage) {
     let deferred = Q.defer();
-    let db=create_db('gijpayment');
-    try {
-        db.view(__design_view,'findPaymentTime',
-    {key:{year:js.client.data.paymentlist.year,month:js.client.data.paymentlist.month,date:js.client.data.paymentlist.date},descending:true},
-    (err,res)=>{
-        if(err) {
-            js.client.data.message=err;
-            deferred.reject(js);
-        }else{
-            let arr=[];
-            for (let index = 0; index < res.rows.length; index++) {
-                const element = res.rows[index].value;
-                filterObject(element);
-                arr.push(element);
+    let db = create_db('gijserviceprovider');
+    db.list({
+        include_docs: true,
+        limit: maxpage,
+        skip: page
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index].doc;
+                arr.push(arr);
             }
             deferred.resolve(arr);
         }
     });
-    } catch (error) {
-        js.client.data.message=error;
-            deferred.reject(js);
+    return deferred.promise;
+}
+
+function check_gij_stock_ws() {
+
+}
+
+function getGijPackages(page, maxpage) {
+    let deferred = Q.defer();
+    let db = create_db('gijpackage');
+    db.list({
+        include_docs: true,
+        limit: maxpage,
+        skip: page
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index].doc;
+                arr.push(arr);
+            }
+            deferred.resolve(arr);
+        }
+    });
+    return deferred.promise;
+}
+
+function getGijPackageByGui(gui) {
+    let deferred = Q.defer();
+    let db = create_db('gijpackage');
+    db.view(__design_view, 'findByGUI', {
+        key: gui
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr[0]);
+        }
+    });
+    return deferred.promise;
+}
+
+function updateGijPackage(doc) {
+    let deferred = Q.defer();
+    let db = create_db('gijpackage');
+    if (!doc._rev) {
+        doc.gui = uuidV4();
     }
-    
+    db.insert(doc, doc.gui, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            deferred.resolve(res);
+        }
+    });
+    return deferred.promise;
+}
+
+function getGijCustomers(page, maxpage) {
+    let deferred = Q.defer();
+    let db = create_db('gijcustomer');
+    db.list({
+        include_docs: true,
+        limit: maxpage,
+        skip: page
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index].doc;
+                arr.push(arr);
+            }
+            deferred.resolve(arr);
+        }
+    });
+    return deferred.promise;
+}
+
+function getGijCustomerByUserGui(gui) {
+    let deferred = Q.defer();
+    let db = create_db('gijcustomer');
+    db.view(__design_view, 'findByUserGUI', {
+        key: gui
+    }, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            let arr = [];
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index].value;
+                arr.push(arr);
+            }
+            deferred.resolve(arr[0]);
+        }
+    });
+    return deferred.promise;
+}
+
+function updateGijCustomer(doc) {
+    let deferred = Q.defer();
+    let db = create_db('gijcustomer');
+    if (!doc._rev) {
+        doc.gui = uuidV4();
+    }
+    db.insert(doc, doc.gui, (err, res) => {
+        if (err) deferred.reject(err);
+        else {
+            deferred.resolve(res);
+        }
+    });
+    return deferred.promise;
+}
+
+function deductGij(array, v, ref) {
+    let sum = 0;
+    left = 0;
+    for (let index = 0; index < array.length; index++) {
+        const element = array[index];
+        if (index * element.gijvalue <= v) {
+            element.usedtime = convertTZ(new Date());
+            element.ref.push(ref);
+            sum += element.gijvalue
+        } else {
+            left += element.gijvalue;
+        }
+
+    }
+    return sum + left - v;
+}
+
+function pay_gijservice(js) {
+    const deferred = Q.defer();
+    const db = create_db('gijpayment');
+    js.client.data.gijpayment.paymentype = 'pay-package';
+    js.client.data.gijpayment.gui = uuidV4();
+    js.client.data.gijpayment.usergui = js.client.data.user.gui;
+    js.client.data.gijpayment.sender = js.client.username;
+    js.client.data.gijpayment.receiver = '@service-provider@';
+    getGijPackageByGui(js.client.data.gijpayment.ref + '').then(res => {
+        if (res) {
+            getGijCustomerByUserGui(js.client.data.user.gui).then(res => {
+                if (res) {
+
+                } else {
+                    let c = {
+                        gui: uuidV4(),
+                        usergui: this.client.data.user.gui,
+                        currentpackage = [{
+                            packagegui: res.gui,
+                            starttime: convertTZ(new Date()),
+                            endtime: moment(new Date()).add(1, 'months').format(),
+                            paymentgui: ''
+                        }],
+                        createddate: convertTZ(new Date()),
+                        lastupdate: convertTZ(new Date()),
+                        isactive: true,
+
+                    };
+                    updateGijCustomer()
+                }
+            });
+            let p = res;
+            if (integer.parse(res.packagevalue + '') === integer.parse(js.client.data.gijpayment.paymentvalue + '')) {
+                getPocketByUserGUI(js.client.data.user.gui).then(res => {
+                    let p_sender = res;
+                    findAvailableGij(p_sender.gui).then(res => {
+                        if (res) {
+                            let a_gij = res;
+                            if (p_sender.totalvalue >= js.client.data.gijpayment.paymentvalue) {
+                                let left = deductGij(a_gij, js.client.data.gijpayment.paymentvalue, js.client.data.gijpayment.gui);
+                                left >= 0 ? p_sender.totalvalue = left : p_sender.totalvalue -= js.client.data.gijpayment.paymentvalue;
+                                p_sender.totalspent += js.client.data.gijpayment.paymentvalue;
+                                updateGijPayment(js.client.data.gijpayment).then(res => {
+                                    updateUserGij(a_gij).then(res => {
+                                        updateGijPocket(p_sender).then(res => {
+                                            findUserByGUI(js).then(res => {
+                                                let u = res;
+                                                u.gijvalue = p_sender.totalvalue;
+                                                u.totalgijspent = p_sender.totalspent;
+                                                js.client.data.user = u;
+                                                updateUser(js).then(res => {
+
+                                                    // filterObject(js.client);
+                                                    // setNotificationStatus(js.client);
+                                                    getGijServiceProviders(30, 0).then(res => {
+                                                        let str = '';
+                                                        for (let index = 0; index < res.length; index++) {
+                                                            const element = res[index];
+                                                            if (p.serviceprovider.indexOf(element.gui)) {
+                                                                str = `${element.servicename},${element.discount},
+                                                                ${element.description}
+                                                                `;
+                                                            }
+                                                        }
+                                                        deferred.resolve(`OK pay service
+                                                            ${p.packagename}, value: ${p.packagevalue},
+                                                            (${p.description}),
+                                                            ${str}`);
+                                                    });
+                                                });
+                                            });
+
+                                        });
+                                    });
+                                });
+                            } else {
+                                throw new Error('ERROR insufficient value ');
+                            }
+                        } else {
+                            throw new Error('Error no availalbe gij');
+                        }
+                    })
+                    // let c_js=JSON.parse(JSON.stringify(js));
+                    // c_js.client.data.user.username=js.client.data.gijpayment.receiver;
+                    // findUserByUsername(c_js).then(res=>{
+                    //     let receiver=res;
+                    //     getPocketByUserGUI(receiver.gui).then(res=>{
+                    //         let p_receiver=res;
+
+                    //     }).catch(err=>{
+                    //         js.client.data.message=err;
+                    //         deferred.reject(js);
+                    //     });
+                    // }).catch(err=>{
+                    //     js.client.data.message=err;
+                    //     deferred.reject(js);
+                    // });        
+                });
+            } else {
+                throw new Error('ERROR please check package value');
+            }
+
+        } else {
+            throw new Error('ERROR no package found');
+        }
+    }).catch(err => {
+        js.client.data.message = err;
+        deferred.reject(js);
+    });
+
+    return deferred.promise;
+}
+
+function get_payment_ws(js) {
+    let deferred = Q.defer();
+    let db = create_db('gijpayment');
+    try {
+        db.view(__design_view, 'findPaymentTime', {
+                key: {
+                    year: js.client.data.paymentlist.year,
+                    month: js.client.data.paymentlist.month,
+                    date: js.client.data.paymentlist.date
+                },
+                descending: true
+            },
+            (err, res) => {
+                if (err) {
+                    js.client.data.message = err;
+                    deferred.reject(js);
+                } else {
+                    let arr = [];
+                    for (let index = 0; index < res.rows.length; index++) {
+                        const element = res.rows[index].value;
+                        filterObject(element);
+                        arr.push(element);
+                    }
+                    deferred.resolve(arr);
+                }
+            });
+    } catch (error) {
+        js.client.data.message = error;
+        deferred.reject(js);
+    }
+
     return deferred.promise;
 }
 
@@ -1147,6 +1537,7 @@ function findUserByGUI(js) {
     client.prefix = 'gij';
     client.data.command = 'get-user-info';
     let ws_client = new WebSocket('ws://localhost:6688/'); // user-management
+    ws_client.binaryType = 'arraybuffer';
     ws_client.on('open', function open() {
         ws_client.send(JSON.stringify(client), function (err) {
             if (err) {
@@ -1157,7 +1548,7 @@ function findUserByGUI(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client = JSON.parse(data);
+        client =  JSON.parse(ab2str(data));
         delete client.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -1177,6 +1568,7 @@ function findUserByUsername(js) {
     let deferred = Q.defer();
     let client = js.client;
     client.data.command = 'find-by-username';
+    client.prefix = 'gij';
     ws_client.on('open', function open() {
         ws_client.send(JSON.stringify(client), function (err) {
             if (err) {
@@ -1187,7 +1579,7 @@ function findUserByUsername(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client = JSON.parse(data);
+        client =  JSON.parse(ab2str(data));
         delete data.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -1349,7 +1741,9 @@ function sumArray(arr, prop, isaverage) {
 function updateUserGij(g) {
     let deferred = Q.defer();
     let db = create_db('usergij');
-    db.insert(g, g._id, (err, res) => {
+    if (g._rev)
+        g.gui = uuidV4();
+    db.insert(g, g.gui, (err, res) => {
         if (err) deferred.reject(err);
         else {
             deferred.resolve(res);
@@ -1361,6 +1755,8 @@ function updateUserGij(g) {
 function updateGijPayment(t) {
     let deferred = q.defer();
     let db = create_db('gijpayment');
+    if (!t._rev)
+        t.gui = uuidV4();
     db.insert(t, t.gui, (err, res) => {
         if (err) deferred.reject(err);
         else {
@@ -1380,11 +1776,12 @@ function transfer_gij_ws(js) {
     //js.client.data.gijtransaction.ref=
     try {
         if (sendGij == receiveGij) {
-            findUserByGUI(js).then(res => {
+            let c_js = JSON.parse(JSON.stringify(js));
+            findUserByGUI(c_js).then(res => {
                 let sender = res;
-                js.client.data.user = {};
-                js.client.data.user.username = js.client.data.payment.receiver;
-                findUserByUsername(js).then(res => {
+                c_js.client.data.user = {};
+                c_js.client.data.user.username = js.client.data.payment.receiver;
+                findUserByUsername(c_js).then(res => {
                     if (res) {
                         let reciver = res;
                         getPocketByUserGUI(sender.gui).then(res => {
@@ -1420,11 +1817,11 @@ function transfer_gij_ws(js) {
                                                                                     gui: uuidV4(),
                                                                                     usergui: this.client.data.user.gui,
                                                                                     paymenttime: convertTZ(new Date()),
-                                                                                    payemntvalue: Int.parse(js.client.data.payment.sendGij + ''),
+                                                                                    paymentvalue: Int.parse(js.client.data.payment.sendGij + ''),
                                                                                     ref: uuidV4(),
                                                                                     sender: js.client.data.payment.sender,
                                                                                     receiver: js.client.data.payment.receiver,
-                                                                                    paymentype:'transfer',
+                                                                                    paymentype: 'transfer',
                                                                                     sendingvalue: Int.parse(js.client.data.payment.sendingvalue + ''),
                                                                                     receivingvalue: Int.parse(js.client.data.payment.receivingvalue + ''),
                                                                                 }
@@ -1438,34 +1835,35 @@ function transfer_gij_ws(js) {
                                                                                             // transfer gijs from current user to target user and sum all 
                                                                                             for (let index = 0; index < s_a_gij.length; index++) {
                                                                                                 const element = s_a_gij[index];
-                                                                                                if(element.gijvalue*i<=sendGij){
+                                                                                                if (element.gijvalue * i <= sendGij) {
                                                                                                     //element.usedtime=convertTZ(new Date());
-                                                                                                    element.usergui=recieverpocket.usergui;                                                                                                    
-                                                                                                    element.gijpocketgui=recieverpocket.gui;
-                                                                                                    if(Array.isArray(element.owners))
+                                                                                                    element.usergui = recieverpocket.usergui;
+                                                                                                    element.gijpocketgui = recieverpocket.gui;
+                                                                                                    if (Array.isArray(element.owners))
                                                                                                         element.owners.push(recieverpocket.usergui);
-                                                                                                    else{
-                                                                                                        element.owners=[];
-                                                                                                        element.owners.push(recieverpocket.usergui);   
-                                                                                                    }                     
-                                                                                                    if(Array.isArray(element.ref))
+                                                                                                    else {
+                                                                                                        element.owners = [];
+                                                                                                        element.owners.push(recieverpocket.usergui);
+                                                                                                    }
+                                                                                                    if (Array.isArray(element.ref))
                                                                                                         element.ref.push('transfer');
-                                                                                                    else{
-                                                                                                        element.ref=[];
-                                                                                                        element.ref.push('transfer');   
-                                                                                                    }                
+                                                                                                    else {
+                                                                                                        element.ref = [];
+                                                                                                        element.ref.push('transfer');
+                                                                                                    }
                                                                                                     element.ref.push(gijpayment.gui);
-                                                                                                }                                                                                                    
+                                                                                                } else
+                                                                                                    break;
                                                                                             }
                                                                                             updateUserGij(s_a_gij).then(res => {
                                                                                                 // update gij pocket  
-                                                                                                recieverpocket.totalgij +=sendGij
-                                                                                                recieverpocket.totalvalue +=sendGij;
-                                                                                                recieverpocket.sumgij+sendGij;
+                                                                                                recieverpocket.totalgij += sendGij
+                                                                                                recieverpocket.totalvalue += sendGij;
+                                                                                                recieverpocket.sumgij + sendGij;
                                                                                                 updateGijPocket(recieverpocket).then(res => {
                                                                                                     //updateUserGij(s_a_gij).then(res=>{                                                                                                
-                                                                                                    senderpocket.totalgij -=sendGij;
-                                                                                                    senderpocket.totalspent +=sendGij;
+                                                                                                    senderpocket.totalgij -= sendGij;
+                                                                                                    senderpocket.totalspent += sendGij;
                                                                                                     //senderpocket.sumgij+=send;
                                                                                                     updateGijPocket(senderpocket).then(res => {
                                                                                                         js.client.data.message = 'OK transfered :' + sendGij;
@@ -1596,9 +1994,10 @@ function filterObject(obj) {
         for (x = 0; x < need.length; x++) {
             let key = need[x];
             if (!obj.hasOwnProperty(i)) {} else if (Array.isArray(obj[i])) {
-                obj[i] = '';
-            } else if (typeof obj[i] == 'object') {
-                filterObject(obj[i], need);
+                if (i.toLowerCase().indexOf(key) > -1)
+                    obj[i] = [];
+            } else if (typeof obj[i] === 'object') {
+                filterObject(obj[i]);
             } else if (i.indexOf(key) > -1) {
                 obj[i] = '';
             }
@@ -1606,12 +2005,49 @@ function filterObject(obj) {
     }
     return obj;
 }
+
+function ab2str(buf) {
+    return String.fromCharCode.apply(null, new Uint8Array(buf));
+}
+
+function str2ab(str) {
+    var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char
+    var bufView = new Uint8Array(buf);
+    for (var i = 0, strLen = str.length; i < strLen; i++) {
+        bufView[i] = str.charCodeAt(i);
+    }
+    return buf;
+}
+
+function heartbeat() {
+    if (!this.lastupdate && !this.gui) {
+        console.log('HEART BEAT:' + this.gui + " is alive:" + this.isAlive + " " + this.lastupdate + " logout");
+        this.isAlive = false;
+    }
+    let startDate = moment(this.lastupdate)
+    let endDate = moment(convertTZ(new Date()));
+
+    const timeout = endDate.diff(startDate, 'seconds');
+    // if(this.gui!=this.gui){
+    //     this.isAlive=false;
+    //     console.log('HEART BEAT:'+this.gui+" is alive:"+this.isAlive+" "+this.lastupdate+" timeout"+timeout);
+    //     return;
+    // }
+    if (timeout > 60 * 3)
+        this.isAlive = false;
+    else
+        this.isAlive = true;
+
+    console.log('HEART BEAT:' + this.gui + " is alive:" + this.isAlive + " " + this.lastupdate + " timeout" + timeout);
+    //this.send(this.client);
+}
 wss.on('connection', function connection(ws, req) {
     const ip = req.connection.remoteAddress;
     console.log('connection from ' + ip);
+    ws.binaryType = 'arraybuffer';
     //const ip = req.headers['x-forwarded-for'];
     ws.isAlive = true;
-    //ws.on('pong', heartbeat);
+    ws.on('pong', heartbeat);
     ws.on('error', function (err) {
         //js.client.data.message=JSON.stringify(err);
         var l = {
@@ -1624,31 +2060,54 @@ wss.on('connection', function connection(ws, req) {
     })
     ws.on('message', function incoming(data) {
         let js = {};
-        js.client = data = JSON.parse(data);
-        js.ws = ws;
-        ws.client = data;
-        commandReader(js).then(res => {
-
-            // CLEAN ALL GUI BEFORE SEND OUT
-            filterObject(js.client.data); // TODO HERE 
-            ws.send(JSON.stringify(js.client));
-        }).catch(err => {
-            js = err;
-            var l = {
-                log: js.client.data.message,
-                logdate: convertTZ(new Date()),
-                type: "error",
-                gui: uuidV4()
-            };
-            //console.log(err);
-            errorLogging(l);
-            console.log('ws sending');
-            js.client.data.message = js.client.data.message.message;
-            ws.send(JSON.stringify(js.client));
-        });
+        try {
+            js.client = data = JSON.parse(ab2str(data));
+            js.ws = ws;
+            ws.client = data;
+            commandReader(js).then(res => {
+    
+                // CLEAN ALL GUI BEFORE SEND OUT
+                filterObject(js.client.data); // TODO HERE 
+                ws.send(Buffer.from(JSON.stringify(js.client)), {
+                    binary: true
+                });
+            }).catch(err => {
+                js = err;
+                var l = {
+                    log: js.client.data.message,
+                    logdate: convertTZ(new Date()),
+                    type: "error",
+                    gui: uuidV4()
+                };
+                //console.log(err);
+                errorLogging(l);
+                console.log('ws sending');
+                js.client.data.message = js.client.data.message.message;
+                ws.send(Buffer.from(JSON.stringify(js.client)), {
+                    binary: true
+                });
+            });
+        } catch (error) {
+            js.client.data.message = error.message;
+                ws.send(Buffer.from(JSON.stringify(js.client)), {
+                    binary: true
+                });
+        }
     });
 
 });
+const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        try {
+            if (ws.isAlive === false) return ws.terminate();
+            console.log('TIME INTERVAL');
+            ws.isAlive = false;
+            ws.ping(noop);
+        } catch (error) {
+            console.log(error);
+        }
+    });
+}, 30000); // set 60 seconds 
 server.listen(8888, "0.0.0.0", function () {
     console.log('Example app listening on port 8888!')
 });
