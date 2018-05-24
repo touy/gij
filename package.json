@@ -53,7 +53,9 @@
     "soap": "^0.21.0",
     "strong-soap": "^1.9.0",
     "uuid": "^3.2.1",
-    "ws": "^5.1.1"
+    "ws": "^5.1.1",
+    "bufferutil": "^3.0.5",
+    "utf-8-validate": "^4.0.2"
   },
   "devDependencies": {
     "@types/redis": "^2.8.6",
@@ -72,5 +74,9 @@
   "bugs": {
     "url": "https://github.com/touy/gij/issues"
   },
-  "homepage": "https://github.com/touy/gij#readme"
+  "homepage": "https://github.com/touy/gij#readme",
+  "optionalDependencies": {
+    "bufferutil": "^3.0.5",
+    "utf-8-validate": "^4.0.2"
+  }
 }
