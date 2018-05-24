@@ -436,11 +436,15 @@ r_client.on("monitor", function (time, args, raw_reply) {
             //console.log(element);
             if (_current_system + "_client_" + element.gui == key) {
                 console.log('client-changed');
-                element.send(JSON.stringify(js));
+                element.send(Buffer.from(JSON.stringify(js.client)), {
+                    binary: true
+                });
             }
             if (_current_system + "_error_" + element.gui == key) {
                 console.log('error-changed');
-                element.send(JSON.stringify(js));
+                element.send(Buffer.from(JSON.stringify(js.client)), {
+                    binary: true
+                });
                 var l = {
                     log: JSON.stringify(js),
                     logdate: convertTZ(new Date()),
@@ -452,43 +456,57 @@ r_client.on("monitor", function (time, args, raw_reply) {
             if (element['client'] !== undefined) {
                 if (_current_system + "_login_" + element.client.logintoken == key) {
                     console.log('login-changed');
-                    element.send(JSON.stringify(js));
+                    element.send(Buffer.from(JSON.stringify(js.client)), {
+                        binary: true
+                    });
                 }
                 if (_current_system + "_usergui_" + element.client.logintoken == key) {
 
                     console.log('gui-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
                 if (_current_system + "_forgot_" + element.client.logintoken == key) {
 
                     console.log('forgot-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
                 if (_current_system + "_phone_" + element.client.logintoken == key) {
 
                     console.log('phone-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
                 if (_current_system + "_secret_" + element.client.logintoken == key) {
 
                     console.log('secret-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
                 if (_current_system + "_message_" + element.client.logintoken == key) {
 
                     console.log('message-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
                 if (_current_system + "_notification_" + element.client.logintoken == key) {
 
                     console.log('notification-changed');
                     if (_system_prefix.indexOf(element.client.prefix) > -1)
-                        element.send(JSON.stringify(js));
+                        element.send(Buffer.from(JSON.stringify(js.client)), {
+                            binary: true
+                        });
                 }
             }
         });
@@ -613,7 +631,7 @@ function LTCserviceSMS(c) {
         });
         ws_client.on('message', function incoming(data) {
             console.log("RECIEVED  FROM SMS : ");
-            client =  JSON.parse(ab2str(data));
+            client = JSON.parse(ab2str(data));
             //console.log(client);
             client.data.sms.content = '';
             client.data['notification'] = 'SMS has been sent out';
@@ -806,7 +824,7 @@ function getUserInfoByLoginToken(js) {
     let deferred = Q.defer();
     try {
         let client = js.client;
-        client.command = 'get-user-gui';
+        client.data.command = 'get-user-gui';
         client.prefix = 'gij';
         let ws_client = new WebSocket('ws://nonav.net:6688/'); // user-management
         ws_client.binaryType = 'arraybuffer';
@@ -819,7 +837,7 @@ function getUserInfoByLoginToken(js) {
             });
         });
         ws_client.on('message', function incoming(data) {
-            client =  JSON.parse(ab2str(data));
+            client = JSON.parse(ab2str(data));
             delete data.prefix;
             //delete data.res.SendSMSResult.user_id;
             //js.client=data;
@@ -1109,7 +1127,7 @@ function updateUser(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client =  JSON.parse(ab2str(data));
+        client = JSON.parse(ab2str(data));
         delete data.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -1548,7 +1566,7 @@ function findUserByGUI(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client =  JSON.parse(ab2str(data));
+        client = JSON.parse(ab2str(data));
         delete client.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -1579,7 +1597,7 @@ function findUserByUsername(js) {
         });
     });
     ws_client.on('message', function incoming(data) {
-        client =  JSON.parse(ab2str(data));
+        client = JSON.parse(ab2str(data));
         delete data.prefix;
         //delete data.res.SendSMSResult.user_id;
         setNotificationStatus(client);
@@ -2062,11 +2080,13 @@ wss.on('connection', function connection(ws, req) {
         let js = {};
         try {
             js.client = data = JSON.parse(ab2str(data));
+            ws
             js.ws = ws;
             ws.client = data;
             commandReader(js).then(res => {
-    
+                js=res;
                 // CLEAN ALL GUI BEFORE SEND OUT
+                delete js['client'].auth;                                        
                 filterObject(js.client.data); // TODO HERE 
                 ws.send(Buffer.from(JSON.stringify(js.client)), {
                     binary: true
@@ -2083,15 +2103,19 @@ wss.on('connection', function connection(ws, req) {
                 errorLogging(l);
                 console.log('ws sending');
                 js.client.data.message = js.client.data.message.message;
+                delete js['client'].auth;                                        
+                filterObject(js.client.data); // TODO HERE 
                 ws.send(Buffer.from(JSON.stringify(js.client)), {
                     binary: true
                 });
             });
         } catch (error) {
             js.client.data.message = error.message;
-                ws.send(Buffer.from(JSON.stringify(js.client)), {
-                    binary: true
-                });
+            delete js['client'].auth;                                        
+            filterObject(js.client.data); // TODO HERE 
+            ws.send(Buffer.from(JSON.stringify(js.client)), {
+                binary: true
+            });
         }
     });
 
