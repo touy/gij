@@ -1,7 +1,7 @@
 import * as moment from 'moment-timezone';
 import * as express from "express";
-import * as crypto from 'crypto';
-import * as request from 'request';
+// import * as crypto from 'crypto';
+//import * as request from 'request';
 import * as Nano from 'nano';
 import * as async from 'async';
 import * as uuidV4 from 'uuid';
@@ -9,25 +9,27 @@ import * as cors from 'cors';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as redis from 'redis';
-import * as __browser from 'detect-browser';
+///import * as __browser from 'detect-browser';
 import * as path from 'path'
-import * as passwordValidator from 'password-validator';
-import * as util from 'util';
+// import * as passwordValidator from 'password-validator';
+// import * as passwordValidator from 'password-validator';
+var passwordValidator = require('password-validator');
+//import * as util from 'util';
 import * as Q from 'q';
 import * as bodyParser from 'body-parser';
 import * as methodOverride from 'method-override';
 import * as WebSocket from 'ws';
-import { RequestHandlerParams } from 'express-serve-static-core';
+//import { RequestHandlerParams } from 'express-serve-static-core';
 import { Request, NextFunction, ErrorRequestHandler, Response } from "express";
-import { NextHandleFunction } from 'connect';
+// import { NextHandleFunction } from 'connect';
 
 export interface gijuser {
     username: string;
     password: string;
     phonenumber: number;
     gui: string;
-    createddate: Date;
-    lastupdate: Date;
+    createddate: '';
+    lastupdate: '';
     isactive: boolean;
     parents: string[];
     roles: string[];
@@ -45,8 +47,8 @@ export interface gij { // as gij stock
     gui: string;
     sn: string;
     value: number;
-    createddate: Date;
-    importeddate: Date;
+    createddate: '';
+    importeddate: '';
     isused: boolean;
 }
 export interface usergij {
@@ -54,7 +56,7 @@ export interface usergij {
     sn: string;
     gijgui: string;
     gijvalue: number;
-    usedtime: Date;
+    usedtime: '';
     ref: any[];
     owners: any[];
     gijpocketgui: string;
@@ -62,7 +64,7 @@ export interface usergij {
 export interface gijpocket {
     gui: string;
     usergui: string;
-    createddate: Date;
+    createddate: '';
     totalvalue: number; // total value left
     totalspent: number; // total spent all time
     totalgij: number; // total gij left
@@ -91,7 +93,7 @@ export interface servicepackage {
     packagename: string;
     packagevalue: number;
     description: string;
-    createddate: Date;
+    createddate: '';
     serviceprovider: any[];
     isactive: boolean;
 }
@@ -100,8 +102,8 @@ export interface customers {
     usergui: string;
     currentpackage: [{
         packagegui: string;
-        starttime: Date;
-        endtime: Date;
+        starttime: '';
+        endtime: '';
         paymentgui: string;
     }],
     createddate: string;
@@ -110,19 +112,17 @@ export interface customers {
 
 }
 class App {
-    topup_ws(arg0: any): any {
-        throw new Error("Method not implemented.");
-    }
+    
     //*** DESIGN */
     private __design_serviceprovider = {
         "_id": "_design/objectList",
         "views": {
             "findByGUI": {
-                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,null);\r\n    }\r\n}"
             },
             "countByGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -131,11 +131,11 @@ class App {
         "_id": "_design/objectList",
         "views": {
             "findByGUI": {
-                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,null);\r\n    }\r\n}"
             },
             "countByGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -144,11 +144,11 @@ class App {
         "_id": "_design/objectList",
         "views": {
             "findByUserGUI": {
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             },
             "countByUserGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -156,35 +156,31 @@ class App {
     private __design_gij = {
         "_id": "_design/objectList",
         "views": {
-            "findeCreatedDate": {
-                "map": "function(doc) {\r\n    if(doc.createddate) {\r\n        emit(doc.createddate,doc);\r\n    }\r\n}"
+            "findCreatedDate": {
+                "map": "function(doc) {\r\n    if(doc.createddate) {\r\n        emit(doc.createddate,null);\r\n    }\r\n}"
             },
             "countByUserGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.createddate) {\r\n        emit(doc.createddate,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gui) {\r\n        emit(doc.gui,null);\r\n    }\r\n}"
             },
 
-            "findeImportedDate": {
-                "map": "function(doc) {\r\n    if(doc.importeddate) {\r\n        emit(doc.importeddate,doc);\r\n    }\r\n}"
+            "findImportedDate": {
+                "map": "function(doc) {\r\n    if(doc.importeddate) {\r\n        emit(doc.importeddate,null);\r\n    }\r\n}"
             },
             "countByImportedDate": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.importeddate) {\r\n        emit(doc.importeddate,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.importeddate) {\r\n        emit(doc.importeddate,null);\r\n    }\r\n}"
             },
             "findSN": {
-                "map": "function(doc) {\r\n    if(doc.sn) {\r\n        emit(doc.sn,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.sn) {\r\n        emit(doc.sn,null);\r\n    }\r\n}"
             },
             "findIsUsed": {
-                "map": "function(doc) {\r\n            emit(doc.isused,doc);\r\n    }"
+                "map": "function(doc) {\r\n            emit(doc.isused,null);\r\n    }"
             },
             "countIsUsed": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n            emit(doc.isused,doc);\r\n    }"
+                "map": "function(doc) {\r\n            emit(doc.isused,null);\r\n    }"
             },
-            "countAll": {
-                "reduce": "_count",
-                "map": "function(doc) {\r\n            emit(null,doc);\r\n    }"
-            }
         },
         "language": "javascript"
     };
@@ -192,28 +188,28 @@ class App {
         "_id": "_design/objectList",
         "views": {
             "findPaymentRef": {
-                "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref,doc.gui],doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref,doc.gui],null);\r\n    }\r\n}"
             },
             "findUsedTime": {
-                "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],doc);\r\n    }"
+                "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],null);\r\n    }"
             },
             "countUsedTime": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],doc);\r\n    }"
+                "map": "function(doc) {\r\n   emit([doc.usedtime,doc.gui],null);\r\n    }"
             },
             "findAvailableGij": {
-                "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+                "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,null);\r\n    }"
             },
             "countAvailableGij": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+                "map": "function(doc) {\r\n   if(doc.usedtime&&doc.gui) emit(doc.gui,null);\r\n    }"
             },
             "findUsedGij": {
-                "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+                "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,null);\r\n    }"
             },
             "countUsedGij": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,doc);\r\n    }"
+                "map": "function(doc) {\r\n   if(!doc.usedtime&&doc.gui) emit(doc.gui,null);\r\n    }"
             },
             "sumAllGij": {
                 "reduce": "_sum",
@@ -224,28 +220,28 @@ class App {
                 "map": "function(doc) {\r\n  if(doc.usedtime) emit(doc.pocketgui,doc.gijvalue);\r\n    }"
             },
             "findByUserGUI": {
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             },
             "countByUserGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             },
             "findByPocketGUI": {
-                "map": "function(doc) {\r\n    if(doc.pocketgui) {\r\n        emit(doc.pocketgui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.pocketgui) {\r\n        emit(doc.pocketgui,null);\r\n    }\r\n}"
             },
             "countByPocketGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.pocketgui) {\r\n        emit(doc.pocketgui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.pocketgui) {\r\n        emit(doc.pocketgui,null);\r\n    }\r\n}"
             },
             "findSN": {
-                "map": "function(doc) {\r\n    if(doc.sn) {\r\n        emit(doc.sn,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.sn) {\r\n        emit(doc.sn,null);\r\n    }\r\n}"
             },
             "findByGIJGUI": {
-                "map": "function(doc) {\r\n    if(doc.gijgui) {\r\n        emit(doc.gijgui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gijgui) {\r\n        emit(doc.gijgui,null);\r\n    }\r\n}"
             },
             "countByGIJGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.gijgui) {\r\n        emit(doc.gijgui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.gijgui) {\r\n        emit(doc.gijgui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -254,11 +250,11 @@ class App {
         "_id": "_design/objectList",
         "views": {
             "findByUserGUI": {
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             },
             "countByUserGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -268,7 +264,7 @@ class App {
         "_id": "_design/objectList",
         "views": {
             "findPaymentRef": {
-                "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref],doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.ref) {\r\n        emit([doc.ref],null);\r\n    }\r\n}"
             },
             "findPaymentTime": {
                 "map": `(doc) {
@@ -278,7 +274,7 @@ class App {
                                                 (d.getMonth()+1),
                                                 d.getDate()];
                                                 
-                                         emit(key, doc);
+                                         emit(key, null);
                                  }
                                  
                                  //emit(null,d.getMonth());
@@ -286,14 +282,14 @@ class App {
             },
             "countPaymenTime": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n   emit([doc.paymenttime],doc);\r\n    }"
+                "map": "function(doc) {\r\n   emit([doc.paymenttime],null);\r\n    }"
             },
             "findByUserGUI": {
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             },
             "countByUserGUI": {
                 "reduce": "_count",
-                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,doc);\r\n    }\r\n}"
+                "map": "function(doc) {\r\n    if(doc.usergui) {\r\n        emit(doc.usergui,null);\r\n    }\r\n}"
             }
         },
         "language": "javascript"
@@ -371,7 +367,7 @@ class App {
                 //     ws['isAlive'] = false;
                 // }
                 // let startDate = moment(ws['lastupdate'])
-                // let endDate = moment(parent.convertTZ(new Date()));
+                // let endDate = moment(parent.convertTZ(moment.now()));
                 // const timeout = endDate.diff(startDate, 'seconds');
                 // if (timeout > 60 * 3)
                 //     ws['isAlive'] = false;
@@ -385,7 +381,7 @@ class App {
                 //js.client.data.message=JSON.stringify(err);
                 var l = {
                     log: err,
-                    logdate: parent.convertTZ(new Date()),
+                    logdate: parent.convertTZ(moment.now()),
                     type: "error",
                     gui: uuidV4()
                 };
@@ -396,7 +392,7 @@ class App {
                 try {
                     js['client'] = JSON.parse(parent.ab2str(data));
                     js['ws'] = ws;
-                    ws['lastupdate'] = parent.convertTZ(new Date());
+                    ws['lastupdate'] = parent.convertTZ(moment.now());
                     ws['isAlive'] = true;
                     ws['gui'] = js['client'].gui;
                     js['client'].auth = {};
@@ -406,7 +402,7 @@ class App {
                         js = res;
                         ws['gui'] = js['client'].gui;
                         ws['client'] = js['client'];
-                        ws['lastupdate'] = parent.convertTZ(new Date());
+                        ws['lastupdate'] = parent.convertTZ(moment.now());
 
                         if (res['client'].data.command === 'logout') {
                             ws['gui'] = '';
@@ -425,7 +421,7 @@ class App {
                         js = err;
                         var l = {
                             log: js['client'].data.message,
-                            logdate: parent.convertTZ(new Date()),
+                            logdate: parent.convertTZ(moment.now()),
                             type: "error",
                             gui: uuidV4()
                         };
@@ -433,7 +429,7 @@ class App {
                         parent.errorLogging(l);
                         console.log('ws sending');
                         ws['client'] = js['client'];
-                        ws['lastupdate'] = parent.convertTZ(new Date());
+                        ws['lastupdate'] = parent.convertTZ(moment.now());
                         js['client'].data.message = js['client'].data.message.message;
                         parent.filterObject(js['client'].auth);
                         let b = Buffer.from(JSON.stringify(js['client'])).toString('base64');
@@ -444,7 +440,7 @@ class App {
                 } catch (error) {
                     js['client'].data.message = error.message;
                     ws['client'] = js['client'];
-                    ws['lastupdate'] = parent.convertTZ(new Date());
+                    ws['lastupdate'] = parent.convertTZ(moment.now());
                     parent.filterObject(js['client'].auth);
                     let b = Buffer.from(JSON.stringify(js['client'])).toString('base64');
                     ws.send((JSON.stringify(b)), {
@@ -508,7 +504,7 @@ class App {
                     });
                     var l = {
                         log: JSON.stringify(js),
-                        logdate: this.convertTZ(new Date()),
+                        logdate: this.convertTZ(moment.now()),
                         type: "error",
                         gui: uuidV4()
                     };
@@ -525,14 +521,14 @@ class App {
                     if (this._current_system + "_usergui_" + element['client'].logintoken == key) {
 
                         console.log('gui-changed');
-                        if (this._system_prefix.indexOf(element['client'].prefix) > -1){
+                        if (this._system_prefix.indexOf(element['client'].prefix) > -1) {
                             let b = Buffer.from(JSON.stringify(element['client'])).toString('base64');
                             element.send((JSON.stringify(b)), {
                                 binary: true
                             });
                         }
 
-                            
+
                     }
 
                     if (this._current_system + "_message_" + element['client'].logintoken == key) {
@@ -563,7 +559,7 @@ class App {
 
     }
     constructor() {
-
+        this.convertTZ(moment.now());
         this._current_system = 'ice-maker';
 
 
@@ -698,6 +694,7 @@ class App {
     __design_view = "objectList";
 
     convertTZ(fromTZ) {
+        process.env.TZ = 'Asia/Vientiane';
         return moment.tz(fromTZ, "Asia/Vientiane").toDate();
     }
     errorLogging(log) {
@@ -714,7 +711,7 @@ class App {
         console.log(err);
         var l = {
             log: err,
-            logdate: this.convertTZ(new Date()),
+            logdate: this.convertTZ(moment.now()),
             type: "error",
             gui: uuidV4()
         };
@@ -769,7 +766,7 @@ class App {
     //         });
     //         var l = {
     //             log: JSON.stringify(js),
-    //             logdate: this.convertTZ(new Date()),
+    //             logdate: this.convertTZ(moment.now()),
     //             type: "error",
     //             gui: uuidV4()
     //         };
@@ -900,7 +897,7 @@ class App {
                         command: 'online-changed',
                         client: {
                             username: client.username,
-                            onlinetime: this.convertTZ(new Date()),
+                            onlinetime: this.convertTZ(moment.now()),
                             system: this._current_system,
                             login: arr,
                         }
@@ -1050,6 +1047,68 @@ class App {
                     //         deferred.reject(err);
                     //     });
                     //     break;
+                    
+                    case 'check-gij-stock': // ADMiN ONLY
+                        this.check_gij_stock_ws(js).then(res => {
+                            deferred.resolve(res);
+                            //console.log(res);
+
+                        }).catch(err => {
+                            //console.log(err);
+                            deferred.reject(err);
+                        });
+                        break;
+                    case 'import-gij-stock': // ADMiN ONLY
+                        this.import_gij_stock_ws(js).then(res => {
+                            deferred.resolve(res);
+                            //console.log(res);
+
+                        }).catch(err => {
+                            //console.log(err);
+                            deferred.reject(err);
+                        });
+                        break;
+                    case 'generate-gij-stock': // ADMiN ONLY
+                    this.generate_gij_stock_ws(js).then(res => {
+                        deferred.resolve(res);
+                        //console.log(res);
+
+                    }).catch(err => {
+                        //console.log(err);
+                        deferred.reject(err);
+                    });
+                        break;
+                    case 'topup-gij': // ADMiN ONLY
+                        this.topup_ws(js).then(res => {
+                            deferred.resolve(res);
+                            //console.log(res);
+
+                        }).catch(err => {
+                            //console.log(err);
+                            deferred.reject(err);
+                        });
+                        break;
+                    case 'approve-topup-gij-request': // ADMiN ONLY
+                        this.approve_topup_gij_ws(js).then(res => {
+                            deferred.resolve(res);
+                            //console.log(res);
+                        }).catch(err => {
+                            //console.log(err);
+                            deferred.reject(err);
+                        });
+                        break;
+                    case 'approve-list-topup-gij-request': // ADMiN ONLY
+                        this.approve_list_topup_gij_request(js).then(res => {
+                            deferred.resolve(res);
+                            //console.log(res);
+                        }).catch(err => {
+                            //console.log(err);
+                            deferred.reject(err);
+                        });
+                        break;
+                    // case 'system-prefix':
+                    //     deferred.resolve(get_system_prefix());
+                    // break;
                     case 'pay-gijservice':
                         this.pay_gijservice(js).then(res => { // pay for service such as : topup
                             deferred.resolve(res);
@@ -1068,67 +1127,6 @@ class App {
                             deferred.reject(err);
                         });
                         break;
-                    case 'check-gij-stock': // ADMiN ONLY
-                        this.check_gij_stock_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    case 'import-gij-stock': // ADMiN ONLY
-                        this.check_gij_stock_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    case 'generate-gij-stock': // ADMiN ONLY
-                        this.check_gij_stock_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    case 'topup-gij': // ADMiN ONLY
-                        this.topup_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    case 'approve-topup-gij-request': // ADMiN ONLY
-                        this.topup_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    case 'approve-list-topup-gij-request': // ADMiN ONLY
-                        this.topup_ws(js).then(res => {
-                            deferred.resolve(res);
-                            //console.log(res);
-                        }).catch(err => {
-                            //console.log(err);
-                            deferred.reject(err);
-                        });
-                        break;
-                    // case 'system-prefix':
-                    //     deferred.resolve(get_system_prefix());
-                    // break;
                     default:
                         break;
                 }
@@ -1192,7 +1190,6 @@ class App {
             this.setErrorStatus(client);
             deferred.reject(error);
         }
-
         return deferred.promise;
     }
 
@@ -1209,7 +1206,7 @@ class App {
                     const p = {
                         gui: uuidV4(),
                         usergui: js.client.data.auth.gui,
-                        createddate: this.convertTZ(new Date()),
+                        createddate: this.convertTZ(moment.now()),
                         totalvalue: 0,
                         totalspent: 0,
                     };
@@ -1241,12 +1238,13 @@ class App {
         let db = this.create_db('gijpocket');
         db.view(this.__design_view, 'findByPocketGUI', {
             key: gui + '',
-            limit: 1
+            limit: 1,
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 if (res.rows.length) {
-                    deferred.resolve(res.rows[0].value);
+                    deferred.resolve(res.rows[0].doc);
                 } else {
                     deferred.reject('');
                 }
@@ -1260,12 +1258,13 @@ class App {
         let db = this.create_db('gijpocket');
         db.view(this.__design_view, 'findByUserGUI', {
             key: gui + '',
-            limit: 1
+            limit: 1,
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 if (res.rows.length) {
-                    deferred.resolve(res.rows[0].value);
+                    deferred.resolve(res.rows[0].doc);
                 } else {
                     deferred.reject('');
                 }
@@ -1304,7 +1303,7 @@ class App {
         this.findGijPocketByGUI(gui).then(res => {
             let arr = [];
             for (let index = 0; index < res['rows'].length; index++) {
-                const element = res['rows'][index].value;
+                const element = res['rows'][index].doc;
                 arr.push(element);
             }
             deferred.resolve({ arr: arr });
@@ -1324,7 +1323,7 @@ class App {
                 if (err) deferred.reject(err);
                 else {
                     if (res.rows.length) {
-                        deferred.resolve(res.rows[0].value);
+                        deferred.resolve(res.rows[0].doc);
                     } else {
                         deferred.reject(new Error('ERROR no gij found'));
                     }
@@ -1350,13 +1349,14 @@ class App {
                     key: pgui + '',
                     limit: maxpage,
                     skip: page,
-                    descending: true
+                    descending: true,
+                    include_docs: true
                 }, (err, res) => {
                     if (err) deferred.reject(err);
                     else {
                         let arr = [];
                         for (let index = 0; index < res.rows.length; index++) {
-                            const element = res.rows[index].value;
+                            const element = res.rows[index].doc;
                             arr.push(element)
                         }
                         deferred.resolve({
@@ -1419,17 +1419,19 @@ class App {
             }
             let db = this.create_db('usergij');
             db.view(this.__design_view, 'sumAllGij', {
-                key: js.client.data.gijpocket.gui + ''
+                key: js.client.data.gijpocket.gui + '',
+                include_docs: true
             }, (err, res) => {
                 if (err) deferred.reject(err);
                 else {
-                    const sumAll = res.rows[0].value;
+                    const sumAll = res.rows[0].doc;
                     db.view(this.__design_view, 'sumSpent', {
-                        key: js.client.data.gijpocket.gui + ''
+                        key: js.client.data.gijpocket.gui + '',
+                        include_docs: true
                     }, (err, res) => {
                         if (err) deferred.reject(err);
                         else {
-                            const sumSpent = res.rows[0].value;
+                            const sumSpent = res.rows[0].doc;
                             deferred.resolve({
                                 total: sumAll,
                                 spent: sumSpent
@@ -1603,9 +1605,92 @@ class App {
         });
         return deferred.promise;
     }
+    approve_list_topup_gij_request(js){
+        let deferred = Q.defer();
 
+        return deferred.promise;
+    }
+    approve_topup_gij_ws(js){
+        let deferred = Q.defer();
+
+        return deferred.promise;
+    }
+    topup_ws(js): any {       
+        let deferred = Q.defer();
+
+        return deferred.promise;
+    }
+    generate_gij_stock_ws(js){
+        
+        let deferred = Q.defer();
+
+        return deferred.promise;
+    }
+    import_gij_stock_ws(js){
+        let deferred = Q.defer();
+
+        return deferred.promise;
+    }
+    countGijStock(){
+        let deferred = Q.defer();
+        let db=this.create_db('gij');
+        db.view(this.__design_view,'countIsUsed',{key:true,include_docs:true},(err,res)=>{
+            if(err){
+                console.log(err);
+                deferred.reject(err);
+            }else{
+                if(res){
+                    let arr=[];
+                    for (let index = 0; index < res.rows.length; index++) {
+                        const element = res.rows[index].value;
+                        arr.push(element);
+                    }
+                    deferred.resolve(arr[0]);
+                }
+            }
+        });
+
+        return deferred.promise;
+
+    }
+    getAvailableGijStock(page,maxpage){
+        
+        let deferred = Q.defer();
+        let db=this.create_db('gij');
+        db.view(this.__design_view,'findIsUsed',{key:true,include_docs:true,limit:maxpage,skip:page},(err,res)=>{
+            if(err){
+                console.log(err);
+                deferred.reject(err);
+            }else{
+                if(res){
+                    let arr=[];
+                    for (let index = 0; index < res.rows.length; index++) {
+                        const element = res.rows[index].doc;
+                        arr.push(element);
+                    }
+                    deferred.resolve(arr);
+                }
+            }
+        });
+
+        return deferred.promise;
+    }
     check_gij_stock_ws(js) {
         let deferred = Q.defer();
+        this.countGijStock().then(res=>{
+            let count=res;
+            let page=js.client.data.page;
+            let maxpage=js.client.data.maxpage;
+            this.getAvailableGijStock(page,maxpage).then(res=>{
+                deferred.resolve({count:count,arr:res});
+            }).catch(err=>{
+                console.log(err);
+                deferred.reject(err);
+            });
+        }).catch(err=>{
+            console.log(err);
+            deferred.reject(err);
+        });
 
         return deferred.promise;
     }
@@ -1635,13 +1720,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('gijpackage');
         db.view(this.__design_view, 'findByGUI', {
-            key: gui
+            key: gui,
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < arr.length; index++) {
-                    const element = arr[index].value;
+                    const element = arr[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve(arr[0]);
@@ -1690,13 +1776,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('gijcustomer');
         db.view(this.__design_view, 'findByUserGUI', {
-            key: gui
+            key: gui,
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < arr.length; index++) {
-                    const element = arr[index].value;
+                    const element = arr[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve(arr[0]);
@@ -1726,7 +1813,7 @@ class App {
         for (let index = 0; index < array.length; index++) {
             const element = array[index];
             if (index * element.gijvalue <= v) {
-                element.usedtime = this.convertTZ(new Date());
+                element.usedtime = this.convertTZ(moment.now());
                 element.ref.push(ref);
                 sum += element.gijvalue
             } else {
@@ -1749,19 +1836,18 @@ class App {
             if (res) {
                 this.getGijCustomerByUserGui(js.client.data.auth.gui).then(res => {
                     if (res) {
-
                     } else {
                         let c = {
                             gui: uuidV4(),
                             usergui: js.client.data.auth.gui,
                             currentpackage: [{
                                 packagegui: res['gui'],
-                                starttime: this.convertTZ(new Date()),
-                                endtime: moment(new Date()).add(1, 'months').format(),
+                                starttime: this.convertTZ(moment.now()),
+                                endtime: moment(moment.now()).add(1, 'months').format(),
                                 paymentgui: ''
                             }],
-                            createddate: this.convertTZ(new Date()),
-                            lastupdate: this.convertTZ(new Date()),
+                            createddate: this.convertTZ(moment.now()),
+                            lastupdate: this.convertTZ(moment.now()),
                             isactive: true,
 
                         };
@@ -1861,7 +1947,8 @@ class App {
                     month: js.client.data.paymentlist.month,
                     date: js.client.data.paymentlist.date
                 },
-                descending: true
+                descending: true,
+                include_docs: true
             },
                 (err, res) => {
                     if (err) {
@@ -1870,7 +1957,7 @@ class App {
                     } else {
                         let arr = [];
                         for (let index = 0; index < res.rows.length; index++) {
-                            const element = res.rows[index].value;
+                            const element = res.rows[index].doc;
                             this.filterObject(element);
                             arr.push(element);
                         }
@@ -1968,13 +2055,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('usergij');
         db.view(this.__design_view, 'countAvailableGij', {
-            key: pgui + ''
+            key: pgui + '',
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < res.rows.length; index++) {
-                    const element = res.rows[index].value;
+                    const element = res.rows[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve(arr[0]);
@@ -1987,13 +2075,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('usergij');
         db.view(this.__design_view, 'findAvailableGij', {
-            key: pgui + ''
+            key: pgui + '',
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < res.rows.length; index++) {
-                    const element = res.rows[index].value;
+                    const element = res.rows[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve({ arr: arr });
@@ -2010,13 +2099,14 @@ class App {
             db.view(this.__design_view, 'findAvailableGij', {
                 key: pgui + '',
                 limit: maxpage,
-                skip: page
+                skip: page,
+                include_docs: true
             }, (err, res) => {
                 if (err) deferred.reject(err);
                 else {
                     let arr = [];
                     for (let index = 0; index < res.rows.length; index++) {
-                        const element = res.rows[index].value;
+                        const element = res.rows[index].doc;
                         arr.push(arr);
                     }
                     deferred.resolve({
@@ -2035,13 +2125,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('usergij');
         db.view(this.__design_view, 'countUsedGij', {
-            key: pgui + ''
+            key: pgui + '',
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < res.rows.length; index++) {
-                    const element = res.rows[index].value;
+                    const element = res.rows[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve(arr[0]);
@@ -2054,13 +2145,14 @@ class App {
         let deferred = Q.defer();
         let db = this.create_db('usergij');
         db.view(this.__design_view, 'findUsedGij', {
-            key: pgui + ''
+            key: pgui + '',
+            include_docs: true
         }, (err, res) => {
             if (err) deferred.reject(err);
             else {
                 let arr = [];
                 for (let index = 0; index < res.rows.length; index++) {
-                    const element = res.rows[index].value;
+                    const element = res.rows[index].doc;
                     arr.push(arr);
                 }
                 deferred.resolve(arr);
@@ -2077,13 +2169,14 @@ class App {
             db.view(this.__design_view, 'findUsedGij', {
                 key: pgui + '',
                 limit: maxpage,
-                skip: page
+                skip: page,
+                include_docs: true
             }, (err, res) => {
                 if (err) deferred.reject(err);
                 else {
                     let arr = [];
                     for (let index = 0; index < res.rows.length; index++) {
-                        const element = res.rows[index].value;
+                        const element = res.rows[index].doc;
                         arr.push(arr);
                     }
                     deferred.resolve({
@@ -2142,7 +2235,7 @@ class App {
         let deferred = Q.defer();
         let sendGij = js.client.data.payment.sendingvalue;
         let receiveGij = js.client.data.payment.receivingvalue;
-        js.client.data.payment.transactiontime = this.convertTZ(new Date());
+        js.client.data.payment.transactiontime = this.convertTZ(moment.now());
         js.client.data.payment.gui = uuidV4();
         js.client.data.payment.sender = js.client.username;
         //js.client.data.gijtransaction.ref=
@@ -2189,7 +2282,7 @@ class App {
                                                                                     let gijpayment = {
                                                                                         gui: uuidV4(),
                                                                                         usergui: js.client.data.auth.gui,
-                                                                                        paymenttime: this.convertTZ(new Date()),
+                                                                                        paymenttime: this.convertTZ(moment.now()),
                                                                                         paymentvalue: Number.parseInt(js.client.data.payment.sendGij + ''),
                                                                                         ref: uuidV4(),
                                                                                         sender: js.client.data.payment.sender,
@@ -2209,7 +2302,7 @@ class App {
                                                                                                 for (let index = 0; index < s_a_gij.length; index++) {
                                                                                                     const element = s_a_gij[index];
                                                                                                     if (element.gijvalue * index <= sendGij) {
-                                                                                                        //element.usedtime=this.convertTZ(new Date());
+                                                                                                        //element.usedtime=this.convertTZ(moment.now());
                                                                                                         element.usergui = recieverpocket.usergui;
                                                                                                         element.gijpocketgui = recieverpocket.gui;
                                                                                                         if (Array.isArray(element.owners)) {
@@ -2394,7 +2487,7 @@ class App {
         //     this.isAlive = false;
         // }
         // let startDate = moment(this.lastupdate)
-        // let endDate = moment(this.convertTZ(new Date()));
+        // let endDate = moment(this.convertTZ(moment.now()));
 
         // const timeout = endDate.diff(startDate, 'seconds');
         // // if(this.gui!=this.gui){
